@@ -1,74 +1,24 @@
 /**
  * User model for the Streamline Shopify App.
- * Defines the schema for user documents in MongoDB.
+ * Defines the table schema for users in SQL Server using Sequelize.
  */
 
-const mongoose = require("mongoose");
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/database");
 
-const userSchema = new mongoose.Schema(
+const User = sequelize.define(
+  "User",
   {
-    // Basic user information
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-    password: {
-      type: String,
-      required: true,
-      minlength: 6,
-    },
-
-    // Additional fields (can be expanded as needed)
-    role: {
-      type: String,
-      enum: ["user", "admin"],
-      default: "user",
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-
-    // Timestamps
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
     },
   },
   {
-    timestamps: true, // Automatically manage createdAt and updatedAt
+    timestamps: true,
+    tableName: "Users",
   }
 );
 
-// Index for faster queries
-userSchema.index({ email: 1 });
-
-// Pre-save middleware to update updatedAt
-userSchema.pre("save", function (next) {
-  this.updatedAt = Date.now();
-  next();
-});
-
-// Instance method example
-userSchema.methods.getFullName = function () {
-  return this.name;
-};
-
-// Static method example
-userSchema.statics.findByEmail = function (email) {
-  return this.findOne({ email: email.toLowerCase() });
-};
-
-module.exports = mongoose.model("User", userSchema);
+module.exports = User;
