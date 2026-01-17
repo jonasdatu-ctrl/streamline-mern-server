@@ -39,7 +39,7 @@ const sequelize = new Sequelize(
         useUTC: false,
         dateFirst: 1,
         encrypt: true,
-        trustServerCertificate: true, // <--- change this
+        trustServerCertificate: true,
       },
     },
 
@@ -65,13 +65,6 @@ const connectDB = async () => {
     // Use { alter: true } to modify tables, or { force: true } to drop and recreate
     await sequelize.sync({ alter: false });
     console.log("Database models synchronized");
-
-    // Test: Count entries in dbo.[User] table
-    const userCount = await sequelize.query(
-      "SELECT COUNT(*) as count FROM dbo.[User]",
-      { type: sequelize.QueryTypes.SELECT }
-    );
-    console.log(`Total entries in dbo.[User] table: ${userCount[0].count}`);
   } catch (error) {
     console.error("Database connection error:", error.message);
     process.exit(1); // Exit process with failure
