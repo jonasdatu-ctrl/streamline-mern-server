@@ -1,17 +1,16 @@
 /**
  * Main server file for the Streamline Shopify App backend.
- * Sets up Express server, connects to MongoDB, and configures middleware and routes.
+ * Sets up Express server, connects to SQL Server, and configures middleware and routes.
  */
 
 require("dotenv").config(); // Load environment variables from .env file
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 
 // Import custom modules
-const connectDB = require("./config/database");
+const { connectDB } = require("./config/database");
 const routes = require("./routes");
 
 // Initialize Express app
@@ -24,8 +23,8 @@ app.use(morgan("combined")); // Logging
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
-// Connect to MongoDB
-// connectDB();
+// Connect to SQL Server
+connectDB();
 
 // Routes
 app.use("/api", routes);
