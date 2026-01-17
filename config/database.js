@@ -38,10 +38,11 @@ const sequelize = new Sequelize(
       options: {
         useUTC: false,
         dateFirst: 1,
-        encrypt: true, // Use encryption for AWS RDS
-        trustServerCertificate: false,
+        encrypt: true,
+        trustServerCertificate: true, // <--- change this
       },
     },
+
     logging: process.env.NODE_ENV === "development" ? console.log : false,
     pool: {
       max: 5,
