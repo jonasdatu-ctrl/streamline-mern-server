@@ -9,24 +9,11 @@
  */
 
 const express = require("express");
-const jwt = require("jsonwebtoken");
-const { hashPassword, verifyPassword } = require("../utils/md5Hash");
+const { hashPassword } = require("../utils/md5Hash");
 const { verifyUserCredentials } = require("../models/User");
+const { generateToken } = require("../utils/authUtils");
 
 const router = express.Router();
-
-/**
- * Validate required environment variables for JWT
- */
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("Missing required environment variable: JWT_SECRET");
-}
-
-/**
- * JWT expiration time (default: 24 hours)
- */
-const JWT_EXPIRY = process.env.JWT_EXPIRY || "24h";
 
 /**
  * POST /auth/login
@@ -104,14 +91,10 @@ router.post("/login", async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign(
-      {
-        UserId: user.UserId,
-        UserLogin: user.UserLogin,
-      },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRY },
-    );
+    const token = generateToken({
+      UserId: user.UserId,
+      UserLogin: user.UserLogin,
+    });
 
     // Return success response
     return res.status(200).json({

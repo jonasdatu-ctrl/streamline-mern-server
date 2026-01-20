@@ -7,9 +7,10 @@
  * Usage: app.use("/api/protected", verifyToken, routes);
  */
 
-const jwt = require("jsonwebtoken");
-
-const JWT_SECRET = process.env.JWT_SECRET;
+const {
+  verifyToken: verify,
+  extractTokenFromHeader,
+} = require("../utils/authUtils");
 
 /**
  * Verify JWT token middleware
@@ -35,17 +36,17 @@ function verifyToken(req, res, next) {
     }
 
     // Extract token from "Bearer <token>"
-    const token = authHeader.split(" ")[1];
+    const token = extractTokenFromHeader(authHeader);
 
     if (!token) {
       return res.status(401).json({
         status: "error",
-        message: "Invalid authorization header format",
+        message: "Invalid authorization header format. Expected: Bearer <token>",
       });
     }
 
     // Verify and decode token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verify(token);
     req.user = decoded;
 
     next();
