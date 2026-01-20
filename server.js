@@ -24,7 +24,7 @@ app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 // Connect to SQL Server
-//connectDB();
+connectDB();
 
 // Routes
 app.use("/api", routes);
