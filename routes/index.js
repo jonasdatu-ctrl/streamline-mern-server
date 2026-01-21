@@ -9,10 +9,12 @@ const router = express.Router();
 // Import route modules
 const authRoutes = require("./auth");
 const reportRoutes = require("./reports");
+const shopifyRoutes = require("./shopify");
 
 // Mount route modules
 router.use("/auth", authRoutes);
 router.use("/reports", reportRoutes);
+router.use("/shopify", shopifyRoutes);
 
 // Placeholder route for initial setup
 router.get("/", (req, res) => {
