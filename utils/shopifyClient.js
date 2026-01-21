@@ -151,7 +151,6 @@ const fetchOrderById = async (orderId) => {
       order(id: $id) {
         id
         name
-        orderNumber
         createdAt
         updatedAt
         processedAt
@@ -262,7 +261,6 @@ const fetchOrderByNumber = async (orderNumber) => {
           node {
             id
             name
-            orderNumber
             createdAt
             updatedAt
             processedAt
@@ -342,7 +340,7 @@ const fetchOrderByNumber = async (orderNumber) => {
 
   try {
     const response = await executeGraphQLQuery(query, {
-      query: `name:${orderNumber} OR number:${orderNumber}`,
+      query: `name:${orderNumber}`,
     });
 
     const orders = response.orders?.edges || [];

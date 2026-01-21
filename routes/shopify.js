@@ -248,7 +248,7 @@ router.post("/fetch-order", verifyToken, async (req, res) => {
     console.log(`Fetching order ${orderId} from Shopify...`);
 
     // Fetch order from Shopify GraphQL API
-    const orderData = await fetchOrderById(orderId);
+    const orderData = await fetchOrderByNumber(orderId);
 
     console.log(`Successfully fetched order ${orderId} from Shopify`);
 
