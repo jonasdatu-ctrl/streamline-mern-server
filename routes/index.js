@@ -14,7 +14,7 @@ const shopifyRoutes = require("./shopify");
 // Mount route modules
 router.use("/auth", authRoutes);
 router.use("/reports", reportRoutes);
-router.use("/shopify", shopifyRoutes);
+router.use("/cases", shopifyRoutes);
 
 // Placeholder route for initial setup
 router.get("/", (req, res) => {
@@ -30,10 +30,10 @@ router.get("/", (req, res) => {
       reports: {
         poponBacklog: "GET /reports/popon-backlog",
       },
-      shopify: {
-        processCase: "POST /shopify/process-case",
-        fetchOrder: "POST /shopify/fetch-order",
-        caseStatus: "GET /shopify/case-status/:caseId",
+      cases: {
+        processCase: "POST /cases/process-case",
+        fetchOrder: "POST /cases/fetch-order",
+        caseStatus: "GET /cases/case-status/:caseId",
       },
     },
   });
