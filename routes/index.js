@@ -32,6 +32,7 @@ router.get("/", (req, res) => {
       },
       shopify: {
         processCase: "POST /shopify/process-case",
+        fetchOrder: "POST /shopify/fetch-order",
         caseStatus: "GET /shopify/case-status/:caseId",
       },
     },

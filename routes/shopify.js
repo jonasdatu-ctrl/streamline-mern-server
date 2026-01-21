@@ -2,7 +2,8 @@
  * Shopify Routes
  *
  * Handles Shopify case processing endpoints:
- * - POST /shopify/process-case - Process a single case ID
+ * - POST /shopify/process-case - Process a single case ID (database check)
+ * - POST /shopify/fetch-order - Fetch order from Shopify GraphQL using order ID
  * - GET /shopify/case-status/:caseId - Get case status from database
  *
  * All endpoints require authentication via JWT token.
@@ -11,6 +12,7 @@
 const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
+const { fetchOrderById } = require("../utils/shopifyClient");
 
 const router = express.Router();
 
@@ -174,6 +176,111 @@ router.get("/case-status/:caseId", verifyToken, async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to fetch case status",
+      error: process.env.NODE_ENV === "development" ? error.message : {},
+    });
+  }
+});
+
+/**
+ * POST /shopify/fetch-order
+ *
+ * Fetches order data from Shopify GraphQL API using order ID.
+ * Implements automatic rate limiting to respect Shopify API limits.
+ *
+ * Request body:
+ * {
+ *   "orderId": "string (numeric)"
+ * }
+ *
+ * Response on success (200):
+ * {
+ *   "status": "success",
+ *   "data": {
+ *     "orderId": "string",
+ *     "orderData": {
+ *       "id": "gid://shopify/Order/...",
+ *       "name": "#1001",
+ *       "orderNumber": 1001,
+ *       "email": "customer@example.com",
+ *       "customer": { ... },
+ *       "lineItems": [ ... ],
+ *       "totalPriceSet": { ... },
+ *       ... other Shopify order fields
+ *     }
+ *   }
+ * }
+ *
+ * Response on error (400/500):
+ * {
+ *   "status": "error",
+ *   "message": "Error message",
+ *   "code": "error_code"
+ * }
+ *
+ * Error codes:
+ * - ORDER_NOT_FOUND: Order doesn't exist in Shopify
+ * - SHOPIFY_API_ERROR: Issue with Shopify API communication
+ * - INVALID_ORDER_ID: Invalid order ID format
+ * - MISSING_CREDENTIALS: Shopify credentials not configured
+ */
+router.post("/fetch-order", verifyToken, async (req, res) => {
+  try {
+    const { orderId } = req.body;
+
+    // Validate input
+    if (!orderId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Order ID is required",
+        code: "MISSING_ORDER_ID",
+      });
+    }
+
+    // Ensure orderId is numeric
+    if (!/^\d+$/.test(orderId)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Order ID must contain numerals only",
+        code: "INVALID_ORDER_ID",
+      });
+    }
+
+    console.log(`Fetching order ${orderId} from Shopify...`);
+
+    // Fetch order from Shopify GraphQL API
+    const orderData = await fetchOrderById(orderId);
+
+    console.log(`Successfully fetched order ${orderId} from Shopify`);
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        orderId,
+        orderData,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching Shopify order:", error);
+
+    // Determine error code and appropriate response
+    let statusCode = 500;
+    let errorCode = "SHOPIFY_API_ERROR";
+
+    if (error.message.includes("not found")) {
+      statusCode = 404;
+      errorCode = "ORDER_NOT_FOUND";
+    } else if (error.message.includes("Missing Shopify credentials")) {
+      statusCode = 500;
+      errorCode = "MISSING_CREDENTIALS";
+    } else if (error.message.includes("GraphQL Error")) {
+      statusCode = 400;
+      errorCode = "SHOPIFY_API_ERROR";
+    }
+
+    res.status(statusCode).json({
+      status: "error",
+      message: error.message || "Failed to fetch order from Shopify",
+      code: errorCode,
       error: process.env.NODE_ENV === "development" ? error.message : {},
     });
   }
