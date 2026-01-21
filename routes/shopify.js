@@ -12,7 +12,7 @@
 const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
-const { fetchOrderById } = require("../utils/shopifyClient");
+const { fetchOrderByNumber } = require("../utils/shopifyClient");
 
 const router = express.Router();
 
