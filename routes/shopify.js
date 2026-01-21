@@ -68,20 +68,15 @@ router.post("/process-case", verifyToken, async (req, res) => {
 
     // Query to check if case exists in database
     const query = `
-      SELECT TOP 1
-        c.Case_ID,
-        c.Case_Patient_First_Name,
-        c.Case_Date_Received,
-        c.Case_Lab_ID,
-        c.IsRushOrder,
-        c.ShipCarrierId,
-        c.Case_Status_ID,
-        s.Status_Streamline_Options,
-        sg.Name AS StatusGroup
-      FROM dbo.[Case] c
-      LEFT JOIN dbo.Status s ON c.Case_Status_ID = s.Status_ID
-      LEFT JOIN dbo.StatusGroup sg ON s.StatusGroupId = sg.StatusGroupId
-      WHERE c.Case_ID = @caseId
+        SELECT TOP 1
+            c.Case_ID,
+            c.Case_Patient_First_Name,
+            c.Case_Date_Received,
+            c.IsRushOrder,
+            s.Status_Streamline_Options
+        FROM dbo.[Case] c
+        LEFT JOIN dbo.Status s ON c.Case_Status_Code = s.Status_ID
+        WHERE c.Case_ID = @caseId
     `;
 
     const result = await sequelize.query(query, {
