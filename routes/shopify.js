@@ -76,7 +76,7 @@ router.post("/process-case", verifyToken, async (req, res) => {
             s.Status_Streamline_Options
         FROM dbo.[Case] c
         LEFT JOIN dbo.Status s ON c.Case_Status_Code = s.Status_ID
-        WHERE c.Case_ID = @caseId
+        WHERE c.Case_ID = :caseId
     `;
 
     const result = await sequelize.query(query, {

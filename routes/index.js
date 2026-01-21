@@ -30,7 +30,10 @@ router.get("/", (req, res) => {
       reports: {
         poponBacklog: "GET /reports/popon-backlog",
       },
-      // Add more endpoints as they are implemented
+      shopify: {
+        processCase: "POST /shopify/process-case",
+        caseStatus: "GET /shopify/case-status/:caseId",
+      },
     },
   });
 });
