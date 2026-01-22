@@ -37,6 +37,7 @@ router.get("/", (req, res) => {
       cases: {
         receiveCase: "POST /cases/receive-case",
         getCase: "GET /cases/get-case/:caseId",
+        createCase: "POST /cases/create-case",
       },
       shopify: {
         fetchOrder: "POST /shopify/fetch-order",

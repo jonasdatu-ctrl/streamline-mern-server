@@ -4,6 +4,7 @@
  * Handles case management endpoints:
  * - POST /cases/receive-case - Receive a single case ID (database check)
  * - GET /cases/get-case/:caseId - Get case information from database
+ * - POST /cases/create-case - Create a new case from Shopify order data
  *
  * All endpoints require authentication via JWT token.
  */
@@ -19,6 +20,9 @@ const NUMERIC_PATTERN = /^\d+$/;
 const ERROR_CODES = {
   MISSING_CASE_ID: "MISSING_CASE_ID",
   INVALID_CASE_ID: "INVALID_CASE_ID",
+  MISSING_CASE_DATA: "MISSING_CASE_DATA",
+  DATABASE_ERROR: "DATABASE_ERROR",
+  CASE_ALREADY_EXISTS: "CASE_ALREADY_EXISTS",
 };
 
 /**
@@ -45,7 +49,11 @@ const validateNumericId = (id, fieldName) => {
 /**
  * Helper: Format error response
  */
-const formatErrorResponse = (message, code = "INTERNAL_ERROR", statusCode = 500) => {
+const formatErrorResponse = (
+  message,
+  code = "INTERNAL_ERROR",
+  statusCode = 500,
+) => {
   const response = {
     status: "error",
     message,
@@ -55,6 +63,81 @@ const formatErrorResponse = (message, code = "INTERNAL_ERROR", statusCode = 500)
     response.details = message;
   }
   return { statusCode, data: response };
+};
+
+/**
+ * Helper: Extract case data from Shopify order
+ * Mimics the .NET ImportOrder logic
+ */
+const extractCaseDataFromOrder = (orderData, userId) => {
+  try {
+    // Extract customer info
+    const firstName = orderData.customer?.firstName || "";
+    const lastName = orderData.customer?.lastName || "";
+    const email = orderData.customer?.email || orderData.email || null;
+
+    if (!email) {
+      throw new Error("Missing customer email");
+    }
+
+    if (!firstName && !lastName) {
+      throw new Error(
+        "Missing customer first and last name. One must be present.",
+      );
+    }
+
+    // Build instructions from note and line items
+    let instructions = orderData.note || "";
+    let isRush = false;
+
+    // Check line items for rush indicators
+    if (orderData.lineItems && orderData.lineItems.edges) {
+      orderData.lineItems.edges.forEach((item) => {
+        const sku = item.node.sku || "";
+        const title = item.node.title || "";
+
+        // Add to instructions
+        instructions += `\n${sku}\n${title}`;
+
+        // Check for rush order
+        if (sku === "R3333" || sku.includes("RUSH")) {
+          isRush = true;
+        }
+      });
+    }
+
+    // Check shipping lines for rush
+    if (!isRush && orderData.shippingLines) {
+      orderData.shippingLines.forEach((line) => {
+        if (
+          (line.code && line.code.includes("RUSH")) ||
+          (line.title && line.title.includes("RUSH"))
+        ) {
+          isRush = true;
+        }
+      });
+    }
+
+    if (!instructions) {
+      throw new Error("Failed to generate instructions. No note or line items");
+    }
+
+    // Extract order number from order name (e.g., "88675969")
+    const orderNumber = orderData.name;
+
+    return {
+      caseId: orderNumber,
+      firstName: firstName.substring(0, 255),
+      lastName: lastName.substring(0, 255),
+      email: email.substring(0, 255),
+      instructions: instructions.substring(0, 4000), // SQL max for varchar
+      userId,
+      isRush,
+      orderNumber,
+    };
+  } catch (error) {
+    throw new Error(`Failed to extract case data: ${error.message}`);
+  }
 };
 
 /**
@@ -201,8 +284,237 @@ router.get("/get-case/:caseId", verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching case information:", error);
-    const { statusCode, data } = formatErrorResponse("Failed to fetch case information");
+    const { statusCode, data } = formatErrorResponse(
+      "Failed to fetch case information",
+    );
     res.status(statusCode).json(data);
+  }
+});
+
+/**
+ * POST /cases/create-case
+ *
+ * Creates a new case in the database from Shopify order data.
+ * Inserts entries into dbo.[Case] and dbo.CaseTransaction tables.
+ *
+ * Request body:
+ * {
+ *   "orderData": {
+ *     "name": "88675969",
+ *     "customer": {
+ *       "firstName": "string",
+ *       "lastName": "string",
+ *       "email": "string"
+ *     },
+ *     "note": "string",
+ *     "lineItems": [ { "sku": "string", "title": "string" }, ... ],
+ *     "shippingLines": [ { "code": "string", "title": "string" }, ... ]
+ *   }
+ * }
+ *
+ * Response on success (201):
+ * {
+ *   "status": "success",
+ *   "message": "Case created successfully",
+ *   "data": {
+ *     "caseId": "88675969",
+ *     "orderNumber": "88675969"
+ *   }
+ * }
+ *
+ * Response on error (400/500):
+ * {
+ *   "status": "error",
+ *   "message": "Error description",
+ *   "code": "ERROR_CODE"
+ * }
+ */
+router.post("/create-case", verifyToken, async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { orderData } = req.body;
+    const authUser = req.user; // From JWT middleware
+
+    // Validate orderData
+    if (!orderData) {
+      return res.status(400).json({
+        status: "error",
+        message: "orderData is required",
+        code: ERROR_CODES.MISSING_CASE_DATA,
+      });
+    }
+
+    console.log(`Creating case from order ${orderData.name}...`);
+
+    // Extract and validate case data from Shopify order
+    const caseData = extractCaseDataFromOrder(orderData, authUser.UserId);
+
+    // Check if case already exists
+    const existingCase = await sequelize.query(
+      `SELECT TOP 1 Case_ID FROM dbo.[Case] WHERE Case_ID = :caseId`,
+      {
+        replacements: { caseId: caseData.caseId },
+        type: sequelize.QueryTypes.SELECT,
+        raw: true,
+        transaction,
+      },
+    );
+
+    if (existingCase && existingCase.length > 0) {
+      await transaction.rollback();
+      return res.status(400).json({
+        status: "error",
+        message: "Case has already been imported",
+        code: ERROR_CODES.CASE_ALREADY_EXISTS,
+      });
+    }
+
+    // Insert into dbo.[Case]
+    const insertCaseQuery = `
+      INSERT INTO dbo.[Case] (
+        Case_ID,
+        UserID,
+        Case_Customer_ID,
+        Case_Date_Received,
+        Case_Date_Required_By_DR,
+        Case_Patient_First_Name,
+        Case_Patient_Last_Name,
+        Case_Patient_Num,
+        Shopify_Email,
+        CaseRXInstructions,
+        case_status_code,
+        Case_Lab_ID,
+        Case_STR_Invoice_Date,
+        Case_Date_Estimated_Return,
+        ShipToId,
+        Case_Lab_Invoice_Fee,
+        Case_Clinic_PO_Number,
+        ShipCarrierId,
+        Invoice_Approved_For_Payment,
+        DoctorReviewed,
+        IsRushOrder
+      ) VALUES (
+        :caseId,
+        :userId,
+        :customerId,
+        GETDATE(),
+        DATEADD(day, :daysRequired, GETDATE()),
+        :firstName,
+        :lastName,
+        :orderNumber,
+        :email,
+        :instructions,
+        :statusCode,
+        :labId,
+        GETDATE(),
+        DATEADD(day, 14, GETDATE()),
+        :shipToId,
+        :invoiceFee,
+        :poNumber,
+        :carrierId,
+        'N',
+        'Y',
+        :isRush
+      )
+    `;
+
+    const daysRequired = caseData.isRush ? 7 : 14;
+
+    await sequelize.query(insertCaseQuery, {
+      replacements: {
+        caseId: caseData.caseId,
+        userId: 8437, // Default lab user
+        customerId: 2283, // Default customer (Shopify)
+        daysRequired,
+        firstName: caseData.firstName,
+        lastName: caseData.lastName,
+        orderNumber: caseData.orderNumber,
+        email: caseData.email,
+        instructions: caseData.instructions,
+        statusCode: 10,
+        labId: 52,
+        shipToId: 2595,
+        invoiceFee: 0,
+        poNumber: caseData.orderNumber,
+        carrierId: 102,
+        isRush: caseData.isRush ? 1 : 0,
+      },
+      type: sequelize.QueryTypes.INSERT,
+      transaction,
+    });
+
+    // Insert into dbo.CaseTransaction
+    const insertTransactionQuery = `
+      INSERT INTO dbo.CaseTransaction (
+        Case_ID,
+        TRN_EMPLOYEE_ID,
+        UserId,
+        TRN_STATUS_CODE,
+        TRN_SHIP_REF_NUM,
+        Case_Date_Record_Created,
+        TRN_SHIP_COMPANY,
+        ShipCarrierId
+      ) VALUES (
+        :caseId,
+        :employeeId,
+        :userId,
+        :statusCode,
+        NULL,
+        GETDATE(),
+        NULL,
+        :carrierId
+      )
+    `;
+
+    await sequelize.query(insertTransactionQuery, {
+      replacements: {
+        caseId: caseData.caseId,
+        employeeId: "SHOPIFY_IMPORT",
+        userId: caseData.userId,
+        statusCode: 10,
+        carrierId: 102,
+      },
+      type: sequelize.QueryTypes.INSERT,
+      transaction,
+    });
+
+    // Commit transaction
+    await transaction.commit();
+
+    console.log(`Case ${caseData.caseId} created successfully`);
+
+    res.status(201).json({
+      status: "success",
+      message: "Case created successfully",
+      data: {
+        caseId: caseData.caseId,
+        orderNumber: caseData.orderNumber,
+      },
+    });
+  } catch (error) {
+    // Rollback on error
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
+
+    console.error("Error creating case:", error);
+
+    let statusCode = 500;
+    let errorCode = ERROR_CODES.DATABASE_ERROR;
+    let message = error.message || "Failed to create case";
+
+    if (error.message.includes("Missing")) {
+      statusCode = 400;
+      errorCode = ERROR_CODES.MISSING_CASE_DATA;
+    }
+
+    res.status(statusCode).json({
+      status: "error",
+      message,
+      code: errorCode,
+      ...(process.env.NODE_ENV === "development" && { details: error.message }),
+    });
   }
 });
 
