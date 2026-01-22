@@ -1,8 +1,8 @@
 /**
- * Receive Cases Routes
+ * Cases Routes
  *
- * Handles case processing endpoints:
- * - POST /cases/process-case - Process a single case ID (database check)
+ * Handles case management endpoints:
+ * - POST /cases/receive-case - Receive a single case ID (database check)
  * - GET /cases/get-case/:caseId - Get case information from database
  *
  * All endpoints require authentication via JWT token.
@@ -58,9 +58,9 @@ const formatErrorResponse = (message, code = "INTERNAL_ERROR", statusCode = 500)
 };
 
 /**
- * POST /cases/process-case
+ * POST /cases/receive-case
  *
- * Processes a single case ID.
+ * Receives and processes a single case ID.
  * Checks if case exists in database, fetches order data from Shopify if new.
  *
  * Request body:
@@ -83,7 +83,7 @@ const formatErrorResponse = (message, code = "INTERNAL_ERROR", statusCode = 500)
  *   }
  * }
  */
-router.post("/process-case", verifyToken, async (req, res) => {
+router.post("/receive-case", verifyToken, async (req, res) => {
   try {
     const { caseId } = req.body;
 
@@ -128,8 +128,8 @@ router.post("/process-case", verifyToken, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error processing case:", error);
-    const { statusCode, data } = formatErrorResponse("Failed to process case");
+    console.error("Error receiving case:", error);
+    const { statusCode, data } = formatErrorResponse("Failed to receive case");
     res.status(statusCode).json(data);
   }
 });

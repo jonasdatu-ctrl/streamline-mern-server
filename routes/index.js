@@ -9,7 +9,7 @@ const router = express.Router();
 // Import route modules
 const authRoutes = require("./auth");
 const reportRoutes = require("./reports");
-const casesRoutes = require("./receivecases");
+const casesRoutes = require("./cases");
 const shopifyRoutes = require("./shopify");
 const statusRoutes = require("./status");
 
@@ -35,7 +35,7 @@ router.get("/", (req, res) => {
         poponBacklog: "GET /reports/popon-backlog",
       },
       cases: {
-        processCase: "POST /cases/process-case",
+        receiveCase: "POST /cases/receive-case",
         getCase: "GET /cases/get-case/:caseId",
       },
       shopify: {
