@@ -1,10 +1,9 @@
 /**
- * Receive Cases Routes
+ * Cases Routes
  *
- * Handles case processing endpoints:
- * - POST /cases/process-case - Process a single case ID (database check)
- * - POST /cases/fetch-order - Fetch order from Shopify GraphQL using order ID
- * - GET /cases/case-status/:caseId - Get case status from database
+ * Handles case management endpoints:
+ * - POST /cases/receive-case - Receive a single case ID (database check)
+ * - GET /cases/get-case/:caseId - Get case information from database
  *
  * All endpoints require authentication via JWT token.
  */
@@ -12,7 +11,6 @@
 const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
-const { fetchOrderByNumber } = require("../utils/shopifyClient");
 
 const router = express.Router();
 
@@ -21,11 +19,6 @@ const NUMERIC_PATTERN = /^\d+$/;
 const ERROR_CODES = {
   MISSING_CASE_ID: "MISSING_CASE_ID",
   INVALID_CASE_ID: "INVALID_CASE_ID",
-  MISSING_ORDER_ID: "MISSING_ORDER_ID",
-  INVALID_ORDER_ID: "INVALID_ORDER_ID",
-  ORDER_NOT_FOUND: "ORDER_NOT_FOUND",
-  SHOPIFY_API_ERROR: "SHOPIFY_API_ERROR",
-  MISSING_CREDENTIALS: "MISSING_CREDENTIALS",
 };
 
 /**
@@ -65,9 +58,9 @@ const formatErrorResponse = (message, code = "INTERNAL_ERROR", statusCode = 500)
 };
 
 /**
- * POST /cases/process-case
+ * POST /cases/receive-case
  *
- * Processes a single case ID.
+ * Receives and processes a single case ID.
  * Checks if case exists in database, fetches order data from Shopify if new.
  *
  * Request body:
@@ -90,7 +83,7 @@ const formatErrorResponse = (message, code = "INTERNAL_ERROR", statusCode = 500)
  *   }
  * }
  */
-router.post("/process-case", verifyToken, async (req, res) => {
+router.post("/receive-case", verifyToken, async (req, res) => {
   try {
     const { caseId } = req.body;
 
@@ -135,16 +128,16 @@ router.post("/process-case", verifyToken, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error processing case:", error);
-    const { statusCode, data } = formatErrorResponse("Failed to process case");
+    console.error("Error receiving case:", error);
+    const { statusCode, data } = formatErrorResponse("Failed to receive case");
     res.status(statusCode).json(data);
   }
 });
 
 /**
- * GET /cases/case-status/:caseId
+ * GET /cases/get-case/:caseId
  *
- * Retrieves the current status of a case from database.
+ * Retrieves case information from database.
  *
  * Response on success (200):
  * {
@@ -152,11 +145,18 @@ router.post("/process-case", verifyToken, async (req, res) => {
  *   "data": {
  *     "caseId": number,
  *     "exists": boolean,
- *     "caseDetails": { ... } or null
+ *     "caseInfo": {
+ *       "Case_ID": number,
+ *       "Case_Patient_First_Name": "string",
+ *       "Case_Date_Received": "YYYY-MM-DD",
+ *       "IsRushOrder": boolean,
+ *       "Case_Status_ID": number,
+ *       "Status_Streamline_Options": "string"
+ *     } or null if not found
  *   }
  * }
  */
-router.get("/case-status/:caseId", verifyToken, async (req, res) => {
+router.get("/get-case/:caseId", verifyToken, async (req, res) => {
   try {
     const { caseId } = req.params;
 
@@ -196,97 +196,13 @@ router.get("/case-status/:caseId", verifyToken, async (req, res) => {
       data: {
         caseId: parseInt(caseId, 10),
         exists: caseExists,
-        caseDetails: caseExists ? result[0] : null,
+        caseInfo: caseExists ? result[0] : null,
       },
     });
   } catch (error) {
-    console.error("Error fetching case status:", error);
-    const { statusCode, data } = formatErrorResponse("Failed to fetch case status");
+    console.error("Error fetching case information:", error);
+    const { statusCode, data } = formatErrorResponse("Failed to fetch case information");
     res.status(statusCode).json(data);
-  }
-});
-
-/**
- * POST /cases/fetch-order
- *
- * Fetches order data from Shopify GraphQL API using order ID.
- * Implements automatic rate limiting to respect Shopify API limits.
- *
- * Request body:
- * {
- *   "orderId": "string (numeric)"
- * }
- *
- * Response on success (200):
- * {
- *   "status": "success",
- *   "data": {
- *     "orderId": "string",
- *     "orderData": {
- *       "id": "gid://shopify/Order/...",
- *       "name": "#1001",
- *       "orderNumber": 1001,
- *       "email": "customer@example.com",
- *       "customer": { ... },
- *       "lineItems": [ ... ],
- *       "totalPriceSet": { ... },
- *       ... other Shopify order fields
- *     }
- *   }
- * }
- */
-router.post("/fetch-order", verifyToken, async (req, res) => {
-  try {
-    const { orderId } = req.body;
-
-    // Validate input
-    const validation = validateNumericId(orderId, "Order ID");
-    if (!validation.valid) {
-      return res.status(400).json({
-        status: "error",
-        message: validation.message,
-        code: validation.code,
-      });
-    }
-
-    console.log(`Fetching order ${orderId} from Shopify...`);
-
-    // Fetch order from Shopify GraphQL API
-    const orderData = await fetchOrderByNumber(orderId);
-
-    console.log(`Successfully fetched order ${orderId} from Shopify`);
-
-    res.status(200).json({
-      status: "success",
-      data: {
-        orderId,
-        orderData,
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching Shopify order:", error);
-
-    // Determine error code and appropriate response
-    let statusCode = 500;
-    let errorCode = ERROR_CODES.SHOPIFY_API_ERROR;
-
-    if (error.message.includes("not found")) {
-      statusCode = 404;
-      errorCode = ERROR_CODES.ORDER_NOT_FOUND;
-    } else if (error.message.includes("Missing Shopify credentials")) {
-      statusCode = 500;
-      errorCode = ERROR_CODES.MISSING_CREDENTIALS;
-    } else if (error.message.includes("GraphQL Error")) {
-      statusCode = 400;
-      errorCode = ERROR_CODES.SHOPIFY_API_ERROR;
-    }
-
-    res.status(statusCode).json({
-      status: "error",
-      message: error.message || "Failed to fetch order from Shopify",
-      code: errorCode,
-      ...(process.env.NODE_ENV === "development" && { details: error.message }),
-    });
   }
 });
 

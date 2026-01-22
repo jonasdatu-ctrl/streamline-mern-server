@@ -9,12 +9,16 @@ const router = express.Router();
 // Import route modules
 const authRoutes = require("./auth");
 const reportRoutes = require("./reports");
-const receiveCasesRoutes = require("./receivecases");
+const casesRoutes = require("./cases");
+const shopifyRoutes = require("./shopify");
+const statusRoutes = require("./status");
 
 // Mount route modules
 router.use("/auth", authRoutes);
 router.use("/reports", reportRoutes);
-router.use("/cases", receiveCasesRoutes);
+router.use("/cases", casesRoutes);
+router.use("/shopify", shopifyRoutes);
+router.use("/status", statusRoutes);
 
 // Placeholder route for initial setup
 router.get("/", (req, res) => {
@@ -31,9 +35,15 @@ router.get("/", (req, res) => {
         poponBacklog: "GET /reports/popon-backlog",
       },
       cases: {
-        processCase: "POST /cases/process-case",
-        fetchOrder: "POST /cases/fetch-order",
-        caseStatus: "GET /cases/case-status/:caseId",
+        receiveCase: "POST /cases/receive-case",
+        getCase: "GET /cases/get-case/:caseId",
+      },
+      shopify: {
+        fetchOrder: "POST /shopify/fetch-order",
+      },
+      status: {
+        getStatus: "GET /status/statuses/:statusId",
+        getAllStatuses: "GET /status/statuses",
       },
     },
   });
