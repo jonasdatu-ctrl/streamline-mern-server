@@ -94,6 +94,7 @@ router.post("/login", async (req, res) => {
     const token = generateToken({
       UserId: user.UserId,
       UserLogin: user.UserLogin,
+      UserName: user.UserName
     });
 
     // Return success response
@@ -104,6 +105,7 @@ router.post("/login", async (req, res) => {
         user: {
           UserId: user.UserId,
           UserLogin: user.UserLogin,
+          UserName: user.UserName
         },
       },
     });
