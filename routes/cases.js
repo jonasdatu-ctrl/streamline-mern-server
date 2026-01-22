@@ -471,7 +471,7 @@ router.post("/create-case", verifyToken, async (req, res) => {
       replacements: {
         caseId: caseData.caseId,
         employeeId: authUser.UserName,
-        userId: authUser.userId,
+        userId: authUser.UserId,
         statusCode: 10,
         carrierId: 102,
       },
