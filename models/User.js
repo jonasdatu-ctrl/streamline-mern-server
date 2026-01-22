@@ -18,7 +18,7 @@ const { QueryTypes } = require("sequelize");
 async function getUserByUsername(username) {
   try {
     const user = await sequelize.query(
-      `SELECT TOP 1 UserID, UserLogin, [Password] FROM dbo.[User] WHERE UserLogin = :username`,
+      `SELECT TOP 1 UserID, UserLogin, UserName [Password] FROM dbo.[User] WHERE UserLogin = :username`,
       {
         replacements: { username },
         type: QueryTypes.SELECT,
@@ -60,6 +60,7 @@ async function verifyUserCredentials(username, passwordHash) {
       return {
         UserId: user.UserId,
         UserLogin: user.UserLogin,
+        UserName: user.UserName
       };
     }
 
