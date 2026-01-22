@@ -372,7 +372,7 @@ router.post("/create-case", verifyToken, async (req, res) => {
 
     // Insert into dbo.[Case]
     const insertCaseQuery = `
-      INSERT INTO dbo.[Case] (
+      INSERT INTO dbo.[Case_20210218] (
         Case_ID,
         UserID,
         Case_Customer_ID,
@@ -446,7 +446,7 @@ router.post("/create-case", verifyToken, async (req, res) => {
 
     // Insert into dbo.CaseTransaction
     const insertTransactionQuery = `
-      INSERT INTO dbo.CaseTransaction (
+      INSERT INTO dbo.CaseTransaction_Test (
         Case_ID,
         TRN_EMPLOYEE_ID,
         UserId,
