@@ -372,7 +372,7 @@ router.post("/create-case", verifyToken, async (req, res) => {
 
     // Insert into dbo.[Case]
     const insertCaseQuery = `
-      INSERT INTO dbo.[Case_20210218] (
+      INSERT INTO dbo.[Case] (
         Case_ID,
         UserID,
         Case_Customer_ID,
@@ -446,7 +446,7 @@ router.post("/create-case", verifyToken, async (req, res) => {
 
     // Insert into dbo.CaseTransaction
     const insertTransactionQuery = `
-      INSERT INTO dbo.CaseTransaction_Test (
+      INSERT INTO dbo.CaseTransaction (
         Case_ID,
         TRN_EMPLOYEE_ID,
         UserId,
@@ -470,8 +470,8 @@ router.post("/create-case", verifyToken, async (req, res) => {
     await sequelize.query(insertTransactionQuery, {
       replacements: {
         caseId: caseData.caseId,
-        employeeId: "SHOPIFY_IMPORT",
-        userId: caseData.userId,
+        employeeId: authUser.UserName,
+        userId: authUser.userId,
         statusCode: 10,
         carrierId: 102,
       },
