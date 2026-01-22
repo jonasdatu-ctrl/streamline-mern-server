@@ -45,6 +45,25 @@ const validateNumericId = (id, fieldName) => {
 };
 
 /**
+ * Helper: Format error response
+ */
+const formatErrorResponse = (
+  message,
+  code = "INTERNAL_ERROR",
+  statusCode = 500,
+) => {
+  const response = {
+    status: "error",
+    message,
+    code,
+  };
+  if (process.env.NODE_ENV === "development") {
+    response.details = message;
+  }
+  return { statusCode, data: response };
+};
+
+/**
  * POST /shopify/fetch-order
  *
  * Fetches order data from Shopify GraphQL API using order ID.
