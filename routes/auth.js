@@ -31,6 +31,26 @@ const {
 
 const router = express.Router();
 
+// Normalize and extract client IP, handling IPv6 loopback and x-forwarded-for
+const getClientIp = (req) => {
+  const normalizeIp = (ip) => {
+    if (!ip) return "unknown";
+    if (ip === "::1") return "127.0.0.1";
+    if (ip.startsWith("::ffff:")) return ip.substring(7);
+    return ip;
+  };
+
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const first = forwarded.split(",").map((p) => p.trim()).find(Boolean);
+    if (first) return normalizeIp(first);
+  }
+
+  const directIp =
+    req.connection?.remoteAddress || req.socket?.remoteAddress || req.ip || "unknown";
+  return normalizeIp(directIp);
+};
+
 /**
  * POST /auth/login
  *
@@ -93,11 +113,7 @@ router.post("/login", async (req, res) => {
     }
 
     // Get client IP address
-    const ipAddress =
-      req.headers["x-forwarded-for"]?.split(",")[0] ||
-      req.connection.remoteAddress ||
-      req.socket.remoteAddress ||
-      "unknown";
+    const ipAddress = getClientIp(req);
 
     // Hash password using MD5 with Classic ASP compatibility
     let passwordHash;
