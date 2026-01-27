@@ -10,6 +10,7 @@
 const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
+const { reportQueries } = require("../config/queries");
 
 const router = express.Router();
 
@@ -54,42 +55,7 @@ const router = express.Router();
  */
 router.get("/popon-backlog", verifyToken, async (req, res) => {
   try {
-    const query = `
-      SELECT        
-        a.Case_ID, 
-        b.Case_Patient_First_Name AS FirstName, 
-        LastScanStatus = c.Status_Streamline_Options + '-' + a.TRN_STATUS_CODE, 
-        f.Name AS StatusGroup, 
-        Cast(b.Case_Date_Received AS DATE) AS DateReceived, 
-        DaysInLab = DATEDIFF(DAY, b.Case_Date_Received, GETDATE()), 
-        LastScanDate = Cast(a.Case_Date_Record_Created AS DATE), 
-        a.TRN_SHIP_REF_NUM, 
-        b.IsRushOrder AS Rush, 
-        a.TRN_STATUS_CODE, 
-        b.ShipCarrierId
-      FROM            
-        (
-          SELECT        
-            ROW_NUMBER() OVER (PARTITION BY case_Id ORDER BY Case_Date_Record_Created DESC) AS RowNumber, 
-            case_id, 
-            TRN_STATUS_CODE, 
-            Case_Date_Record_Created, 
-            TRN_SHIP_REF_NUM
-          FROM casetransaction
-          WHERE Case_ID NOT IN
-            (SELECT CaseId FROM dbo.YearEndClosedCases)
-        ) a 
-      INNER JOIN dbo.[Case] b ON a.Case_ID = b.Case_ID 
-      INNER JOIN dbo.Status c ON a.TRN_STATUS_CODE = c.Status_ID 
-      INNER JOIN dbo.StatusGroup f ON c.StatusGroupId = f.StatusGroupId
-      WHERE        
-        a.RowNumber = 1 
-        AND f.StatusGroupID NOT IN (3, 13, 14, 15, 29, 30) 
-        AND b.Case_Lab_ID IN (52, 53)
-      ORDER BY b.Case_Date_Received DESC
-    `;
-
-    const result = await sequelize.query(query, {
+    const result = await sequelize.query(reportQueries.getPopOnBacklogReport, {
       type: sequelize.QueryTypes.SELECT,
       raw: true,
     });

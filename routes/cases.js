@@ -12,6 +12,7 @@
 const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
+const { caseQueries } = require("../config/queries");
 
 const router = express.Router();
 
@@ -181,19 +182,7 @@ router.post("/receive-case", verifyToken, async (req, res) => {
     }
 
     // Query to check if case exists in database
-    const query = `
-      SELECT TOP 1
-          c.Case_ID,
-          c.Case_Patient_First_Name,
-          c.Case_Date_Received,
-          c.IsRushOrder,
-          s.Status_Streamline_Options
-      FROM dbo.[Case] c
-      LEFT JOIN dbo.Status s ON c.Case_Status_Code = s.Status_ID
-      WHERE c.Case_ID = :caseId
-    `;
-
-    const result = await sequelize.query(query, {
+    const result = await sequelize.query(caseQueries.getCaseWithStatus, {
       replacements: { caseId: parseInt(caseId, 10) },
       type: sequelize.QueryTypes.SELECT,
       raw: true,
@@ -253,20 +242,7 @@ router.get("/get-case/:caseId", verifyToken, async (req, res) => {
       });
     }
 
-    const query = `
-      SELECT TOP 1
-        c.Case_ID,
-        c.Case_Patient_First_Name,
-        c.Case_Date_Received,
-        c.IsRushOrder,
-        c.Case_Status_ID,
-        s.Status_Streamline_Options
-      FROM dbo.[Case] c
-      LEFT JOIN dbo.Status s ON c.Case_Status_ID = s.Status_ID
-      WHERE c.Case_ID = :caseId
-    `;
-
-    const result = await sequelize.query(query, {
+    const result = await sequelize.query(caseQueries.getCaseById, {
       replacements: { caseId: parseInt(caseId, 10) },
       type: sequelize.QueryTypes.SELECT,
       raw: true,
@@ -351,15 +327,12 @@ router.post("/create-case", verifyToken, async (req, res) => {
     const caseData = extractCaseDataFromOrder(orderData, authUser.UserId);
 
     // Check if case already exists
-    const existingCase = await sequelize.query(
-      `SELECT TOP 1 Case_ID FROM dbo.[Case] WHERE Case_ID = :caseId`,
-      {
-        replacements: { caseId: caseData.caseId },
-        type: sequelize.QueryTypes.SELECT,
-        raw: true,
-        transaction,
-      },
-    );
+    const existingCase = await sequelize.query(caseQueries.checkCaseExists, {
+      replacements: { caseId: caseData.caseId },
+      type: sequelize.QueryTypes.SELECT,
+      raw: true,
+      transaction,
+    });
 
     if (existingCase && existingCase.length > 0) {
       await transaction.rollback();
@@ -371,57 +344,9 @@ router.post("/create-case", verifyToken, async (req, res) => {
     }
 
     // Insert into dbo.[Case]
-    const insertCaseQuery = `
-      INSERT INTO dbo.[Case] (
-        Case_ID,
-        UserID,
-        Case_Customer_ID,
-        Case_Date_Received,
-        Case_Date_Required_By_DR,
-        Case_Patient_First_Name,
-        Case_Patient_Last_Name,
-        Case_Patient_Num,
-        Shopify_Email,
-        CaseRXInstructions,
-        case_status_code,
-        Case_Lab_ID,
-        Case_STR_Invoice_Date,
-        Case_Date_Estimated_Return,
-        ShipToId,
-        Case_Lab_Invoice_Fee,
-        Case_Clinic_PO_Number,
-        ShipCarrierId,
-        Invoice_Approved_For_Payment,
-        DoctorReviewed,
-        IsRushOrder
-      ) VALUES (
-        :caseId,
-        :userId,
-        :customerId,
-        GETDATE(),
-        DATEADD(day, :daysRequired, GETDATE()),
-        :firstName,
-        :lastName,
-        :orderNumber,
-        :email,
-        :instructions,
-        :statusCode,
-        :labId,
-        GETDATE(),
-        DATEADD(day, 14, GETDATE()),
-        :shipToId,
-        :invoiceFee,
-        :poNumber,
-        :carrierId,
-        'N',
-        'Y',
-        :isRush
-      )
-    `;
-
     const daysRequired = caseData.isRush ? 7 : 14;
 
-    await sequelize.query(insertCaseQuery, {
+    await sequelize.query(caseQueries.insertCase, {
       replacements: {
         caseId: caseData.caseId,
         userId: 8437, // Default lab user
@@ -445,29 +370,7 @@ router.post("/create-case", verifyToken, async (req, res) => {
     });
 
     // Insert into dbo.CaseTransaction
-    const insertTransactionQuery = `
-      INSERT INTO dbo.CaseTransaction (
-        Case_ID,
-        TRN_EMPLOYEE_ID,
-        UserId,
-        TRN_STATUS_CODE,
-        TRN_SHIP_REF_NUM,
-        Case_Date_Record_Created,
-        TRN_SHIP_COMPANY,
-        ShipCarrierId
-      ) VALUES (
-        :caseId,
-        :employeeId,
-        :userId,
-        :statusCode,
-        NULL,
-        GETDATE(),
-        NULL,
-        :carrierId
-      )
-    `;
-
-    await sequelize.query(insertTransactionQuery, {
+    await sequelize.query(caseQueries.insertCaseTransaction, {
       replacements: {
         caseId: caseData.caseId,
         employeeId: authUser.UserName,

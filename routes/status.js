@@ -11,13 +11,18 @@
 const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
+const { statusQueries } = require("../config/queries");
 
 const router = express.Router();
 
 /**
  * Helper: Format error response
  */
-const formatErrorResponse = (message, code = "INTERNAL_ERROR", statusCode = 500) => {
+const formatErrorResponse = (
+  message,
+  code = "INTERNAL_ERROR",
+  statusCode = 500,
+) => {
   const response = {
     status: "error",
     message,
@@ -51,15 +56,7 @@ const formatErrorResponse = (message, code = "INTERNAL_ERROR", statusCode = 500)
  */
 router.get("/statuses", verifyToken, async (req, res) => {
   try {
-    const query = `
-      SELECT 
-        Status_ID,
-        Status_Streamline_Options
-      FROM dbo.Status
-      ORDER BY Status_ID ASC
-    `;
-
-    const result = await sequelize.query(query, {
+    const result = await sequelize.query(statusQueries.getAllStatuses, {
       type: sequelize.QueryTypes.SELECT,
       raw: true,
     });
@@ -72,7 +69,9 @@ router.get("/statuses", verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching statuses:", error);
-    const { statusCode, data } = formatErrorResponse("Failed to fetch statuses");
+    const { statusCode, data } = formatErrorResponse(
+      "Failed to fetch statuses",
+    );
     res.status(statusCode).json(data);
   }
 });
@@ -107,15 +106,7 @@ router.get("/statuses/:statusId", verifyToken, async (req, res) => {
       });
     }
 
-    const query = `
-      SELECT 
-        Status_ID,
-        Status_Streamline_Options
-      FROM dbo.Status
-      WHERE Status_ID = :statusId
-    `;
-
-    const result = await sequelize.query(query, {
+    const result = await sequelize.query(statusQueries.getStatusById, {
       replacements: { statusId: parseInt(statusId, 10) },
       type: sequelize.QueryTypes.SELECT,
       raw: true,

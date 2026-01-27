@@ -7,6 +7,7 @@
 
 const { sequelize } = require("../config/database");
 const { QueryTypes } = require("sequelize");
+const { userQueries } = require("../config/queries");
 
 /**
  * Fetches a user from the database by username
@@ -17,14 +18,11 @@ const { QueryTypes } = require("sequelize");
  */
 async function getUserByUsername(username) {
   try {
-    const user = await sequelize.query(
-      `SELECT TOP 1 UserID, UserLogin, UserName, [Password] FROM dbo.[User] WHERE UserLogin = :username`,
-      {
-        replacements: { username },
-        type: QueryTypes.SELECT,
-        raw: true,
-      },
-    );
+    const user = await sequelize.query(userQueries.getUserByUsername, {
+      replacements: { username },
+      type: QueryTypes.SELECT,
+      raw: true,
+    });
 
     return user.length > 0 ? user[0] : null;
   } catch (error) {
@@ -60,7 +58,7 @@ async function verifyUserCredentials(username, passwordHash) {
       return {
         UserId: user.UserID,
         UserLogin: user.UserLogin,
-        UserName: user.UserName
+        UserName: user.UserName,
       };
     }
 
