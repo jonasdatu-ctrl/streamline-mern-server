@@ -73,9 +73,7 @@ function getFromAddress() {
   const displayName = process.env.EMAIL_FROM_NAME;
 
   if (!emailFrom) {
-    console.error(
-      "❌ SMTP_EMAIL_FROM not configured - emails cannot be sent",
-    );
+    console.error("❌ SMTP_EMAIL_FROM not configured - emails cannot be sent");
     return null;
   }
 
@@ -105,22 +103,40 @@ function generateAccessCode() {
  */
 async function sendAccessCodeEmail(email, accessCode) {
   try {
+    console.log(`📧 [EMAIL] Starting sendAccessCodeEmail for ${email}`);
+    console.log(`📧 [EMAIL] Access code: ${accessCode}`);
+
     if (!transporter) {
+      console.log("📧 [EMAIL] Transporter not initialized, initializing...");
       transporter = initializeTransporter();
     }
 
     if (!transporter) {
-      console.warn("⚠️  Email service not configured - access code not sent");
+      console.error("❌ [EMAIL] Transporter failed to initialize");
+      console.error(
+        "   Check SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in .env",
+      );
       return false;
     }
 
+    console.log("📧 [EMAIL] Generating email template...");
     const emailBody = accessCodeTemplates.loginAccessCode(accessCode);
     const subject = emailSubjects.accessCodeTemplates.loginAccessCode();
+
+    console.log("📧 [EMAIL] Getting from address...");
+    console.log(`   SMTP_EMAIL_FROM: ${process.env.SMTP_EMAIL_FROM}`);
+    console.log(`   EMAIL_FROM_NAME: ${process.env.EMAIL_FROM_NAME}`);
     const fromAddress = getFromAddress();
 
     if (!fromAddress) {
+      console.error("❌ [EMAIL] From address is null");
+      console.error("   Verify SMTP_EMAIL_FROM is set in .env");
       return false;
     }
+
+    console.log(`📧 [EMAIL] From: ${fromAddress}`);
+    console.log(`📧 [EMAIL] To: ${email}`);
+    console.log(`📧 [EMAIL] Subject: ${subject}`);
 
     const mailOptions = {
       from: fromAddress,
@@ -129,14 +145,19 @@ async function sendAccessCodeEmail(email, accessCode) {
       html: emailBody,
     };
 
+    console.log("📧 [EMAIL] Sending email via SMTP...");
     const info = await transporter.sendMail(mailOptions);
 
-    console.log(
-      `✅ Access code email sent to ${email} (ID: ${info.messageId})`,
-    );
+    console.log(`✅ [EMAIL] Email sent successfully to ${email}`);
+    console.log(`   Message ID: ${info.messageId}`);
+    console.log(`   Response: ${info.response}`);
     return true;
   } catch (error) {
-    console.error("❌ Error sending access code email:", error);
+    console.error("❌ [EMAIL] Error sending access code email:");
+    console.error(`   Message: ${error.message}`);
+    console.error(`   Code: ${error.code}`);
+    console.error(`   Response: ${error.response}`);
+    console.error("   Full error:", error);
     return false;
   }
 }
