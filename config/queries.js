@@ -28,6 +28,36 @@ const userQueries = {
     FROM dbo.[User] 
     WHERE UserLogin = :username
   `,
+
+  /**
+   * Get user with full details for login including customer info
+   */
+  getUserWithDetails: `
+    SELECT TOP 1 
+      u.UserID,
+      u.UserTypeID,
+      u.UserName,
+      u.UserLogin,
+      u.Title,
+      u.UserFName,
+      u.UserLName,
+      u.UserMName,
+      u.[Password],
+      u.RANDOM_PASSWORD,
+      u.EmailAddr,
+      u.Case_Tracking_Email,
+      u.University,
+      u.CustomerID,
+      ut.User_Type_Display_Name,
+      c.Customer_Display_Name,
+      c.CustomerId as CustId,
+      c.Customer_Account_Number
+    FROM [dbo].[User] u
+    INNER JOIN dbo.UserType ut ON ut.UserTypeId = u.UserTypeId
+    LEFT OUTER JOIN dbo.Customer c ON (c.customerId = u.CustomerID OR c.Name = u.University)
+    WHERE (u.UserName = :username OR u.UserLogin = :username)
+      AND u.Password = :password
+  `,
 };
 
 // =============================================================================
@@ -229,6 +259,178 @@ const reportQueries = {
 };
 
 // =============================================================================
+// IP ADDRESS & ACCESS CODE QUERIES
+// =============================================================================
+
+const ipAccessQueries = {
+  /**
+   * Check if IP address is approved for login (has entry with empty AccessCode)
+   */
+  checkIpApproved: `
+    SELECT TOP 1 
+      IPAddress, 
+      UserID, 
+      AccessCode
+    FROM dbo.IPAddress_AdminPermission
+    WHERE IPAddress = :ipAddress AND AccessCode = ''
+  `,
+
+  /**
+   * Get IP permission record by UserID
+   */
+  getIpPermissionByUserId: `
+    SELECT TOP 1 
+      IPAddress, 
+      UserID, 
+      AccessCode
+    FROM dbo.IPAddress_AdminPermission
+    WHERE UserID = :userId
+  `,
+
+  /**
+   * Verify access code for user
+   */
+  verifyAccessCode: `
+    SELECT TOP 1 
+      IPAddress, 
+      UserID, 
+      AccessCode
+    FROM dbo.IPAddress_AdminPermission
+    WHERE AccessCode = :accessCode
+  `,
+
+  /**
+   * Insert new IP permission record with access code
+   */
+  insertIpPermission: `
+    INSERT INTO dbo.IPAddress_AdminPermission (
+      IPAddress, 
+      [Name], 
+      UserID, 
+      AccessCode
+    ) VALUES (
+      :ipAddress, 
+      :username, 
+      :userId, 
+      :accessCode
+    )
+  `,
+
+  /**
+   * Update IP permission - clear access code and update IP address
+   */
+  updateIpPermissionAfterVerification: `
+    UPDATE dbo.IPAddress_AdminPermission
+    SET IPAddress = :ipAddress, 
+        AccessCode = ''
+    WHERE AccessCode = :accessCode
+  `,
+
+  /**
+   * Update IP permission - set new access code and clear IP
+   */
+  updateIpPermissionSetAccessCode: `
+    UPDATE dbo.IPAddress_AdminPermission
+    SET AccessCode = :accessCode, 
+        IPAddress = ''
+    WHERE UserID = :userId
+  `,
+};
+
+// =============================================================================
+// ADMIN SESSION QUERIES
+// =============================================================================
+
+const adminSessionQueries = {
+  /**
+   * Check if admin session exists for username
+   */
+  checkSessionExists: `
+    SELECT TOP 1 
+      username, 
+      Token, 
+      SessionStart
+    FROM dbo.AdminSessionData
+    WHERE UserId = :userID
+  `,
+
+  /**
+   * Insert new admin session
+   */
+  insertAdminSession: `
+    INSERT INTO dbo.AdminSessionData (
+      UserId,
+      UserTypeId,
+      UserFName,
+      username,
+      University,
+      UserDisplayName,
+      CustomerDisplayName,
+      UserTypeDisplayName,
+      UserEmail,
+      CustomerId,
+      CustomerAccountNumber,
+      Token,
+      SessionStart
+    ) VALUES (
+      :userId,
+      :userTypeId,
+      :userFName,
+      :username,
+      :university,
+      :userDisplayName,
+      :customerDisplayName,
+      :userTypeDisplayName,
+      :email,
+      :customerId,
+      :customerAccountNumber,
+      :token,
+      GETDATE()
+    )
+  `,
+
+  /**
+   * Update existing admin session with new token
+   */
+  updateAdminSession: `
+    UPDATE dbo.AdminSessionData
+    SET Token = :token, 
+        SessionStart = GETDATE()
+    WHERE UserId = :userID
+  `,
+
+  /**
+   * Get session token for username
+   */
+  getSessionToken: `
+    SELECT TOP 1 Token
+    FROM dbo.AdminSessionData
+    WHERE UserId = :userID
+  `,
+};
+
+// =============================================================================
+// LOGGING QUERIES
+// =============================================================================
+
+const loggingQueries = {
+  /**
+   * Log failed login attempt
+   */
+  logFailedLoginAttempt: `
+    INSERT INTO dbo.Log_FailedLoginAttempt (
+      UserName, 
+      Password, 
+      DateCreated
+    ) VALUES (
+      :username, 
+      :ipAddress, 
+      GETDATE()
+    )
+  `,
+};
+
+// =============================================================================
 // EXPORTS
 // =============================================================================
 
@@ -237,4 +439,7 @@ module.exports = {
   statusQueries,
   caseQueries,
   reportQueries,
+  ipAccessQueries,
+  adminSessionQueries,
+  loggingQueries,
 };
