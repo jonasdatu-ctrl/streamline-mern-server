@@ -103,40 +103,22 @@ function generateAccessCode() {
  */
 async function sendAccessCodeEmail(email, accessCode) {
   try {
-    console.log(`📧 [EMAIL] Starting sendAccessCodeEmail for ${email}`);
-    console.log(`📧 [EMAIL] Access code: ${accessCode}`);
-
     if (!transporter) {
-      console.log("📧 [EMAIL] Transporter not initialized, initializing...");
       transporter = initializeTransporter();
     }
 
     if (!transporter) {
-      console.error("❌ [EMAIL] Transporter failed to initialize");
-      console.error(
-        "   Check SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in .env",
-      );
+      console.error("❌ Email service not configured - access code email not sent");
       return false;
     }
 
-    console.log("📧 [EMAIL] Generating email template...");
     const emailBody = accessCodeTemplates.loginAccessCode(accessCode);
-    const subject = emailSubjects.accessCodeTemplates.loginAccessCode();
-
-    console.log("📧 [EMAIL] Getting from address...");
-    console.log(`   SMTP_EMAIL_FROM: ${process.env.SMTP_EMAIL_FROM}`);
-    console.log(`   EMAIL_FROM_NAME: ${process.env.EMAIL_FROM_NAME}`);
+    const subject = emailSubjects.accessCodeTemplates.loginAccessCode;
     const fromAddress = getFromAddress();
 
     if (!fromAddress) {
-      console.error("❌ [EMAIL] From address is null");
-      console.error("   Verify SMTP_EMAIL_FROM is set in .env");
       return false;
     }
-
-    console.log(`📧 [EMAIL] From: ${fromAddress}`);
-    console.log(`📧 [EMAIL] To: ${email}`);
-    console.log(`📧 [EMAIL] Subject: ${subject}`);
 
     const mailOptions = {
       from: fromAddress,
@@ -145,19 +127,11 @@ async function sendAccessCodeEmail(email, accessCode) {
       html: emailBody,
     };
 
-    console.log("📧 [EMAIL] Sending email via SMTP...");
     const info = await transporter.sendMail(mailOptions);
-
-    console.log(`✅ [EMAIL] Email sent successfully to ${email}`);
-    console.log(`   Message ID: ${info.messageId}`);
-    console.log(`   Response: ${info.response}`);
+    console.log(`✅ Access code email sent to ${email}`);
     return true;
   } catch (error) {
-    console.error("❌ [EMAIL] Error sending access code email:");
-    console.error(`   Message: ${error.message}`);
-    console.error(`   Code: ${error.code}`);
-    console.error(`   Response: ${error.response}`);
-    console.error("   Full error:", error);
+    console.error("❌ Error sending access code email:", error);
     return false;
   }
 }
@@ -215,7 +189,7 @@ async function sendWelcomeEmail(email, userName) {
   try {
     const appName = process.env.APP_NAME || "Streamline Dental Lab";
     const emailBody = notificationTemplates.welcomeUser(userName, appName);
-    const subject = emailSubjects.notificationTemplates.welcomeUser(appName);
+    const subject = emailSubjects.notificationTemplates.welcomeUser;
 
     return await sendEmail(email, subject, emailBody);
   } catch (error) {
@@ -275,7 +249,7 @@ async function sendFailedLoginAlert(email, username, ipAddress) {
       ipAddress,
       appName,
     );
-    const subject = emailSubjects.alertTemplates.failedLoginAttempt(appName);
+    const subject = emailSubjects.alertTemplates.failedLoginAttempt;
 
     return await sendEmail(email, subject, emailBody);
   } catch (error) {
