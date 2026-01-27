@@ -10,6 +10,8 @@
  * - SMTP_SECURE: Use SSL (true for port 465, false for port 587)
  * - SMTP_USER: Email account username/email
  * - SMTP_PASS: Email account password or app password
+ * - SMTP_EMAIL_FROM: Sender email address (required)
+ * - EMAIL_FROM_NAME: Display name for sender (optional, e.g., "Streamline Support")
  */
 
 const nodemailer = require("nodemailer");
@@ -63,6 +65,28 @@ function initializeTransporter() {
 }
 
 /**
+ * Get formatted from address with optional display name
+ * @returns {string} Formatted from address ("Name <email@example.com>" or "email@example.com")
+ */
+function getFromAddress() {
+  const emailFrom = process.env.SMTP_EMAIL_FROM;
+  const displayName = process.env.EMAIL_FROM_NAME;
+
+  if (!emailFrom) {
+    console.error(
+      "❌ SMTP_EMAIL_FROM not configured - emails cannot be sent",
+    );
+    return null;
+  }
+
+  if (displayName) {
+    return `${displayName} <${emailFrom}>`;
+  }
+
+  return emailFrom;
+}
+
+/**
  * Generate a random 6-character access code
  * @returns {string} 6-character alphanumeric code (uppercase)
  */
@@ -92,9 +116,14 @@ async function sendAccessCodeEmail(email, accessCode) {
 
     const emailBody = accessCodeTemplates.loginAccessCode(accessCode);
     const subject = emailSubjects.accessCodeTemplates.loginAccessCode();
+    const fromAddress = getFromAddress();
+
+    if (!fromAddress) {
+      return false;
+    }
 
     const mailOptions = {
-      from: process.env.SMTP_EMAIL_FROM,
+      from: fromAddress,
       to: email,
       subject,
       html: emailBody,
@@ -131,8 +160,14 @@ async function sendEmail(to, subject, body) {
       return false;
     }
 
+    const fromAddress = getFromAddress();
+
+    if (!fromAddress) {
+      return false;
+    }
+
     const mailOptions = {
-      from: process.env.SMTP_EMAIL_FROM,
+      from: fromAddress,
       to,
       subject,
       html: body,
