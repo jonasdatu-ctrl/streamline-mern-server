@@ -351,7 +351,7 @@ const adminSessionQueries = {
       Token, 
       SessionStart
     FROM dbo.AdminSessionData
-    WHERE username = :username
+    WHERE UserId = :userID
   `,
 
   /**

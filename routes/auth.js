@@ -289,7 +289,7 @@ router.post("/login", async (req, res) => {
     const sessionExistsResult = await sequelize.query(
       adminSessionQueries.checkSessionExists,
       {
-        replacements: { username: user.UserLogin },
+        replacements: { userID: user.UserID },
         type: sequelize.QueryTypes.SELECT,
         raw: true,
       },
