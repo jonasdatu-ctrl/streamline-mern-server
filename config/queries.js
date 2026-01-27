@@ -396,7 +396,7 @@ const adminSessionQueries = {
     UPDATE dbo.AdminSessionData
     SET Token = :token, 
         SessionStart = GETDATE()
-    WHERE username = :username
+    WHERE UserId = :userID
   `,
 
   /**
@@ -405,7 +405,7 @@ const adminSessionQueries = {
   getSessionToken: `
     SELECT TOP 1 Token
     FROM dbo.AdminSessionData
-    WHERE username = :username
+    WHERE UserId = :userID
   `,
 };
 

@@ -300,7 +300,7 @@ router.post("/login", async (req, res) => {
       await sequelize.query(adminSessionQueries.updateAdminSession, {
         replacements: {
           token: sessionToken,
-          username: user.UserLogin,
+          userID: user.UserID,
         },
         type: sequelize.QueryTypes.UPDATE,
       });
