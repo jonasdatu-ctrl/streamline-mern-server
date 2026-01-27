@@ -11,6 +11,7 @@ const morgan = require("morgan");
 
 // Import custom modules
 const { connectDB } = require("./config/database");
+const { initializeTransporter } = require("./utils/emailService");
 const routes = require("./routes");
 
 // Initialize Express app
@@ -22,6 +23,9 @@ app.use(cors()); // Enable CORS for all routes
 app.use(morgan("combined")); // Logging
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+
+// Initialize email service
+initializeTransporter();
 
 // Connect to SQL Server
 //connectDB();

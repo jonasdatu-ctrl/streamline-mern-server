@@ -2,14 +2,69 @@
  * Email Service
  *
  * Handles sending emails for authentication and notifications.
- * Configure your email provider (SendGrid, AWS SES, Nodemailer, etc.)
+ * Uses Nodemailer to send emails via SMTP.
+ *
+ * Configuration via environment variables:
+ * - SMTP_HOST: SMTP server hostname (e.g., smtp.gmail.com, smtp.office365.com)
+ * - SMTP_PORT: SMTP server port (e.g., 587 for TLS, 465 for SSL)
+ * - SMTP_SECURE: Use SSL (true for port 465, false for port 587)
+ * - SMTP_USER: Email account username/email
+ * - SMTP_PASS: Email account password or app password
  */
 
+const nodemailer = require("nodemailer");
 const crypto = require("crypto");
+const {
+  accessCodeTemplates,
+  notificationTemplates,
+  alertTemplates,
+  emailSubjects,
+} = require("../config/emailTemplates");
+
+// Create transporter instance
+let transporter = null;
+
+/**
+ * Initialize email transporter
+ * Called once at startup to configure SMTP
+ */
+function initializeTransporter() {
+  if (transporter) return transporter; // Already initialized
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+
+  // Check if SMTP is configured
+  if (!smtpHost || !smtpPort || !smtpUser || !smtpPass) {
+    console.warn("⚠️  SMTP not configured - emails will not be sent");
+    console.warn("   Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS");
+    return null;
+  }
+
+  try {
+    transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort, 10),
+      secure: process.env.SMTP_SECURE === "true", // true for 465, false for 587
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+    });
+
+    console.log(`✅ Email service initialized - using ${smtpHost}:${smtpPort}`);
+    return transporter;
+  } catch (error) {
+    console.error("❌ Failed to initialize email transporter:", error);
+    return null;
+  }
+}
 
 /**
  * Generate a random 6-character access code
- * @returns {string} 6-character alphanumeric code
+ * @returns {string} 6-character alphanumeric code (uppercase)
  */
 function generateAccessCode() {
   // Generate a random GUID and take the last 6 characters
@@ -26,71 +81,35 @@ function generateAccessCode() {
  */
 async function sendAccessCodeEmail(email, accessCode) {
   try {
-    // TODO: Implement actual email sending using your email service provider
-    // Options: SendGrid, AWS SES, Nodemailer with SMTP, etc.
+    if (!transporter) {
+      transporter = initializeTransporter();
+    }
 
-    const emailBody = `
-      <html>
-        <body style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2>Streamline Dental Lab - Login Access Code</h2>
-          <p>Hello,</p>
-          <p>Please enter the following 6-character code into the login form:</p>
-          <div style="
-            width: 150px;
-            text-align: center;
-            padding: 20px 10px;
-            border: 2px solid #333;
-            margin: 20px auto;
-            font-size: 24px;
-            font-weight: bold;
-            background-color: #f5f5f5;
-            letter-spacing: 3px;
-          ">
-            ${accessCode}
-          </div>
-          <p>This code will allow you to complete your login from this device.</p>
-          <p>If you did not request this code, please ignore this email.</p>
-          <br/>
-          <p>Best regards,<br/>Streamline Dental Lab</p>
-        </body>
-      </html>
-    `;
+    if (!transporter) {
+      console.warn("⚠️  Email service not configured - access code not sent");
+      return false;
+    }
 
-    const emailSubject = "Streamline Login - Access Code Required";
+    const appName = process.env.APP_NAME || "Streamline Dental Lab";
 
-    console.log("=== EMAIL SERVICE ===");
-    console.log(`To: ${email}`);
-    console.log(`Subject: ${emailSubject}`);
-    console.log(`Access Code: ${accessCode}`);
-    console.log("=====================");
+    const emailBody = accessCodeTemplates.loginAccessCode(accessCode, appName);
+    const subject = emailSubjects.accessCodeTemplates.loginAccessCode(appName);
 
-    // TEMPORARY: Log to console during development
-    // In production, implement actual email sending
-    // Example with nodemailer:
-    /*
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: true,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
+    const mailOptions = {
+      from: process.env.SMTP_USER,
       to: email,
-      subject: emailSubject,
-      html: emailBody
-    });
-    */
+      subject,
+      html: emailBody,
+    };
 
-    // For now, return true to simulate successful email sending
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log(
+      `✅ Access code email sent to ${email} (ID: ${info.messageId})`,
+    );
     return true;
   } catch (error) {
-    console.error("Error sending access code email:", error);
+    console.error("❌ Error sending access code email:", error);
     return false;
   }
 }
@@ -105,21 +124,145 @@ async function sendAccessCodeEmail(email, accessCode) {
  */
 async function sendEmail(to, subject, body) {
   try {
-    console.log("=== EMAIL SERVICE ===");
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log("=====================");
+    if (!transporter) {
+      transporter = initializeTransporter();
+    }
 
-    // TODO: Implement actual email sending
+    if (!transporter) {
+      console.warn("⚠️  Email service not configured - email not sent");
+      return false;
+    }
+
+    const mailOptions = {
+      from: process.env.SMTP_USER,
+      to,
+      subject,
+      html: body,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log(`✅ Email sent to ${to} (ID: ${info.messageId})`);
     return true;
   } catch (error) {
-    console.error("Error sending email:", error);
+    console.error("❌ Error sending email:", error);
+    return false;
+  }
+}
+
+/**
+ * Send welcome email to new user
+ *
+ * @param {string} email - Recipient email
+ * @param {string} userName - User's display name
+ * @returns {Promise<boolean>} True if email sent successfully
+ */
+async function sendWelcomeEmail(email, userName) {
+  try {
+    const appName = process.env.APP_NAME || "Streamline Dental Lab";
+    const emailBody = notificationTemplates.welcomeUser(userName, appName);
+    const subject = emailSubjects.notificationTemplates.welcomeUser(appName);
+
+    return await sendEmail(email, subject, emailBody);
+  } catch (error) {
+    console.error("❌ Error sending welcome email:", error);
+    return false;
+  }
+}
+
+/**
+ * Send case status update notification
+ *
+ * @param {string} email - Recipient email
+ * @param {string} caseId - Case ID
+ * @param {string} patientName - Patient name
+ * @param {string} oldStatus - Previous status
+ * @param {string} newStatus - New status
+ * @returns {Promise<boolean>} True if email sent successfully
+ */
+async function sendCaseStatusUpdate(
+  email,
+  caseId,
+  patientName,
+  oldStatus,
+  newStatus,
+) {
+  try {
+    const appName = process.env.APP_NAME || "Streamline Dental Lab";
+    const emailBody = notificationTemplates.caseStatusUpdate(
+      caseId,
+      patientName,
+      oldStatus,
+      newStatus,
+      appName,
+    );
+    const subject = emailSubjects.notificationTemplates.caseStatusUpdate;
+
+    return await sendEmail(email, subject, emailBody);
+  } catch (error) {
+    console.error("❌ Error sending case status update email:", error);
+    return false;
+  }
+}
+
+/**
+ * Send failed login attempt alert
+ *
+ * @param {string} email - Recipient email
+ * @param {string} username - Username of account
+ * @param {string} ipAddress - IP address of failed attempt
+ * @returns {Promise<boolean>} True if email sent successfully
+ */
+async function sendFailedLoginAlert(email, username, ipAddress) {
+  try {
+    const appName = process.env.APP_NAME || "Streamline Dental Lab";
+    const emailBody = alertTemplates.failedLoginAttempt(
+      username,
+      ipAddress,
+      appName,
+    );
+    const subject = emailSubjects.alertTemplates.failedLoginAttempt(appName);
+
+    return await sendEmail(email, subject, emailBody);
+  } catch (error) {
+    console.error("❌ Error sending failed login alert:", error);
+    return false;
+  }
+}
+
+/**
+ * Test SMTP connection
+ * Useful for debugging email configuration issues
+ *
+ * @returns {Promise<boolean>} True if connection successful
+ */
+async function testSmtpConnection() {
+  try {
+    if (!transporter) {
+      transporter = initializeTransporter();
+    }
+
+    if (!transporter) {
+      console.error("❌ Email transporter not initialized");
+      return false;
+    }
+
+    await transporter.verify();
+    console.log("✅ SMTP connection verified successfully");
+    return true;
+  } catch (error) {
+    console.error("❌ SMTP connection failed:", error);
     return false;
   }
 }
 
 module.exports = {
+  initializeTransporter,
   generateAccessCode,
   sendAccessCodeEmail,
   sendEmail,
+  sendWelcomeEmail,
+  sendCaseStatusUpdate,
+  sendFailedLoginAlert,
+  testSmtpConnection,
 };
