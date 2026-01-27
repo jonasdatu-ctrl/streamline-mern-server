@@ -90,13 +90,11 @@ async function sendAccessCodeEmail(email, accessCode) {
       return false;
     }
 
-    const appName = process.env.APP_NAME || "Streamline Dental Lab";
-
-    const emailBody = accessCodeTemplates.loginAccessCode(accessCode, appName);
-    const subject = emailSubjects.accessCodeTemplates.loginAccessCode(appName);
+    const emailBody = accessCodeTemplates.loginAccessCode(accessCode);
+    const subject = emailSubjects.accessCodeTemplates.loginAccessCode();
 
     const mailOptions = {
-      from: process.env.SMTP_USER,
+      from: process.env.SMTP_EMAIL_FROM,
       to: email,
       subject,
       html: emailBody,
@@ -134,7 +132,7 @@ async function sendEmail(to, subject, body) {
     }
 
     const mailOptions = {
-      from: process.env.SMTP_USER,
+      from: process.env.SMTP_EMAIL_FROM,
       to,
       subject,
       html: body,

@@ -19,11 +19,11 @@ const accessCodeTemplates = {
    * Access code email for IP-based authentication
    * Used when user logs in from a new device/location
    */
-  loginAccessCode: (accessCode, appName = "Streamline Dental Lab") => `
+  loginAccessCode: (accessCode) => `
     <html>
       <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9;">
         <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <h2 style="color: #333; margin-bottom: 20px;">${appName} - Login Access Code</h2>
+          <h2 style="color: #333; margin-bottom: 20px;">Streamline Dental - Login Access Code</h2>
           
           <p style="color: #666; font-size: 16px; line-height: 1.6;">Hello,</p>
           
@@ -48,10 +48,6 @@ const accessCodeTemplates = {
           </div>
           
           <p style="color: #666; font-size: 14px; line-height: 1.6;">
-            <strong>This access code will expire in 30 minutes.</strong>
-          </p>
-          
-          <p style="color: #666; font-size: 14px; line-height: 1.6;">
             This code verifies that you are logging in from a new device or location. 
             After successful verification, you won't need to enter a code from this IP address again.
           </p>
@@ -65,7 +61,7 @@ const accessCodeTemplates = {
           
           <p style="color: #999; font-size: 12px; line-height: 1.6;">
             Best regards,<br/>
-            ${appName} Security Team
+            Streamline Dental Security Team
           </p>
         </div>
       </body>
@@ -220,16 +216,14 @@ const alertTemplates = {
 
 const emailSubjects = {
   accessCodeTemplates: {
-    loginAccessCode: (appName = "Streamline Dental Lab") =>
-      `${appName} - Access Code Required`,
+    loginAccessCode: `Streamline login`,
   },
   notificationTemplates: {
-    welcomeUser: (appName = "Streamline Dental Lab") => `Welcome to ${appName}`,
+    welcomeUser: `Welcome to Streamline Dental`,
     caseStatusUpdate: "Case Status Update",
   },
   alertTemplates: {
-    failedLoginAttempt: (appName = "Streamline Dental Lab") =>
-      `${appName} - Failed Login Attempt Alert`,
+    failedLoginAttempt: 'Failed Login Attempt Alert',
   },
 };
 
