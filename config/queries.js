@@ -367,7 +367,7 @@ const adminSessionQueries = {
       UserDisplayName,
       CustomerDisplayName,
       UserTypeDisplayName,
-      EmailAddr,
+      UserEmail,
       CustomerId,
       CustomerAccountNumber,
       Token,
