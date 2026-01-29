@@ -101,11 +101,11 @@ const caseQueries = {
     SELECT TOP 1
       c.Case_ID,
       c.Case_Patient_First_Name,
-      Cast(c.Case_Date_Received AS DATE),
+      CAST(c.Case_Date_Received AS DATE) AS Case_Date_Received,
       c.IsRushOrder,
       s.Status_Streamline_Options,
       (
-        SELECT TOP 1 Cast(ct.Case_Date_Record_Created AS DATE)
+        SELECT TOP 1 CAST(ct.Case_Date_Record_Created AS DATE)
         FROM dbo.CaseTransaction ct
         WHERE ct.Case_ID = c.Case_ID
         ORDER BY ct.Case_Date_Record_Created DESC
