@@ -102,7 +102,7 @@ const caseQueries = {
       c.Case_ID,
       c.Case_Patient_First_Name,
       CAST(c.Case_Date_Received AS DATE) AS Case_Date_Received,
-      c.IsRushOrder,
+      CASE WHEN c.IsRushOrder = 'Y' THEN 1 ELSE 0 END AS IsRushOrder,
       s.Status_Streamline_Options,
       (
         SELECT TOP 1 CAST(ct.Case_Date_Record_Created AS DATE)
