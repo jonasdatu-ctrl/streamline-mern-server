@@ -104,17 +104,12 @@ const processOrderLineItems = async (
       }
     }
 
-    // Update case after all line items processed
-    if (
-      noteSkus.length > 0 ||
-      orderData.lineItems?.edges?.some((i) => i.node.sku?.startsWith("--"))
-    ) {
-      await sequelize.query(caseQueries.updateCaseAfterLineItems, {
-        replacements: { caseId },
-        type: sequelize.QueryTypes.UPDATE,
-        transaction,
-      });
-    }
+    // Always update case after processing (even if no line items found)
+    await sequelize.query(caseQueries.updateCaseAfterLineItems, {
+      replacements: { caseId },
+      type: sequelize.QueryTypes.UPDATE,
+      transaction,
+    });
   } catch (error) {
     console.error("Error processing line items:", error);
     // Don't throw - allow case creation to succeed even if line items fail
