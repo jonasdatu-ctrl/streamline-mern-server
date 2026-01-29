@@ -95,14 +95,21 @@ const statusQueries = {
 const caseQueries = {
   /**
    * Check if a case exists and get basic information with status
+   * Includes the latest status update from CaseTransactions
    */
   getCaseWithStatus: `
     SELECT TOP 1
       c.Case_ID,
       c.Case_Patient_First_Name,
-      c.Case_Date_Received,
+      Cast(c.Case_Date_Received AS DATE),
       c.IsRushOrder,
-      s.Status_Streamline_Options
+      s.Status_Streamline_Options,
+      (
+        SELECT TOP 1 Cast(ct.Case_Date_Record_Created AS DATE)
+        FROM dbo.CaseTransaction ct
+        WHERE ct.Case_ID = c.Case_ID
+        ORDER BY ct.Case_Date_Record_Created DESC
+      ) AS Last_Status_Update
     FROM dbo.[Case] c
     LEFT JOIN dbo.Status s ON c.Case_Status_Code = s.Status_ID
     WHERE c.Case_ID = :caseId
