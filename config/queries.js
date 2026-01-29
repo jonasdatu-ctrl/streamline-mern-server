@@ -215,6 +215,59 @@ const caseQueries = {
       :carrierId
     )
   `,
+
+  /**
+   * Insert case item (line item from Shopify)
+   */
+  insertCaseItem: `
+    INSERT INTO dbo.Case_Items (
+      Case_Id,
+      [name],
+      case_item_tooth,
+      case_item_qty,
+      case_item_shade_ging,
+      case_item_shade_body,
+      case_item_shade_incis,
+      modifier,
+      unit_price
+    ) VALUES (
+      :caseId,
+      :name,
+      :tooth,
+      :qty,
+      :shade,
+      :shade,
+      :shade,
+      :qty,
+      '0.00'
+    );
+    SELECT SCOPE_IDENTITY() AS case_item_id
+  `,
+
+  /**
+   * Insert case item tooth
+   */
+  insertCaseItemTooth: `
+    INSERT INTO dbo.case_item_tooth (
+      case_item_id,
+      item_tooth
+    ) VALUES (
+      :caseItemId,
+      :itemTooth
+    )
+  `,
+
+  /**
+   * Update case after line items are added
+   */
+  updateCaseAfterLineItems: `
+    UPDATE dbo.[Case]
+    SET RXInstructionsReviewed = 'Y',
+        ItemTeethShadeReviewed = 'Y',
+        CaseType = 1,
+        Case_Lab_ID = 52
+    WHERE Case_ID = :caseId
+  `,
 };
 
 // =============================================================================
