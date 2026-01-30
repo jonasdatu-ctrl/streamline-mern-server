@@ -6,6 +6,7 @@
  */
 
 const { sequelize } = require("../config/database");
+const https = require("https");
 
 /**
  * Create a new ticket for a case
@@ -27,6 +28,7 @@ const { sequelize } = require("../config/database");
  * @param {string} [options.message] - Email message
  * @param {string} [options.overrideSubject] - Override template subject
  * @param {string} [options.overrideMessage] - Override template message
+ * @param {boolean} [options.sendEmail=true] - Whether to send email notification
  * @param {Object} [transaction] - Sequelize transaction (optional)
  * @returns {Promise<number>} Created case ticket detail ID
  */
@@ -48,6 +50,7 @@ async function createTicket(options, transaction = null) {
     message = null,
     overrideSubject = null,
     overrideMessage = null,
+    sendEmail = true,
   } = options;
 
   // Determine if we need to manage transaction
@@ -155,8 +158,6 @@ async function createTicket(options, transaction = null) {
     const newTicketNo = ticketNumberResult[0].nextTicketNo;
     const newTicketNoDisplay = `${caseId}-${newTicketNo}-1`;
 
-    console.log(templateData)
-
     // Step 4: Replace tokens in addresses, subject, message
     templateData.fromAddress = await replaceTokens(
       templateData.fromAddress,
@@ -182,9 +183,6 @@ async function createTicket(options, transaction = null) {
       newTicketNoDisplay,
       txn,
     );
-
-    console.log(templateData)
-    return
 
     // Step 5: Set defaults for missing addresses
     if (!templateData.fromAddress) {
@@ -269,7 +267,7 @@ async function createTicket(options, transaction = null) {
           bccAddr: templateData.bccAddress || "",
           templateId,
           subject: templateData.subject,
-          message: templateData.message,
+          message: templateData.message
           userId,
           statusCode: caseStatusCode,
         },
@@ -280,21 +278,21 @@ async function createTicket(options, transaction = null) {
     const newDetailId = ticketDetailResult[0][0].newDetailId;
 
     // Step 9: Append ticket assignment log
-    await sequelize.query(
-      `EXEC dbo.usp_AppendTicketAssignmentLog 
-       @CaseTicketDetailId = :detailId,
-       @AssignedToUserId = :assignedTo,
-       @UserId = :userId`,
-      {
-        replacements: {
-          detailId: newDetailId,
-          assignedTo,
-          userId,
-        },
-        type: sequelize.QueryTypes.RAW,
-        transaction: txn,
-      },
-    );
+    // await sequelize.query(
+    //   `EXEC dbo.usp_AppendTicketAssignmentLog 
+    //    @CaseTicketDetailId = :detailId,
+    //    @AssignedToUserId = :assignedTo,
+    //    @UserId = :userId`,
+    //   {
+    //     replacements: {
+    //       detailId: newDetailId,
+    //       assignedTo,
+    //       userId,
+    //     },
+    //     type: sequelize.QueryTypes.RAW,
+    //     transaction: txn,
+    //   },
+    // );
 
     // Commit transaction if we created it
     if (shouldCommit) {
@@ -304,6 +302,18 @@ async function createTicket(options, transaction = null) {
     console.log(
       `✓ Ticket created for case ${caseId}: Detail ID ${newDetailId}`,
     );
+
+    // Send email notification if requested
+    // if (sendEmail) {
+    //   try {
+    //     await sendEmailTicket(newDetailId);
+    //     console.log(`✓ Email sent for ticket detail ${newDetailId}`);
+    //   } catch (emailError) {
+    //     console.error(`Warning: Failed to send email for ticket ${newDetailId}:`, emailError.message);
+    //     // Don't throw - ticket was created successfully
+    //   }
+    // }
+
     return newDetailId;
   } catch (error) {
     // Rollback if we created the transaction
@@ -313,6 +323,57 @@ async function createTicket(options, transaction = null) {
     console.error(`Error creating ticket for case ${caseId}:`, error);
     throw error;
   }
+}
+
+/**
+ * Send email for a ticket
+ * Makes HTTP request to Streamline email sending endpoint
+ * 
+ * @param {number} ticketDetailId - Case ticket detail ID
+ * @param {string} [attachmentPath] - Optional file path for attachment (e.g., "C:\path\to\file.pdf")
+ * @returns {Promise<void>}
+ */
+async function sendEmailTicket(ticketDetailId, attachmentPath = null) {
+  if (!ticketDetailId || ticketDetailId < 1) {
+    throw new Error('ticketDetailId must be greater than zero');
+  }
+
+  const wwwroot = process.env.STREAMLINE_WEB_ROOT || 'https://www.streamlinedental.com';
+  let url = `${wwwroot}/Secure/Tickets/SendTicketEmail.asp?TicketDetailId=${ticketDetailId}`;
+  
+  // Add attachment parameter if provided
+  if (attachmentPath) {
+    // URL encode the attachment path
+    const encodedPath = encodeURIComponent(attachmentPath);
+    url += `&attach=${encodedPath}`;
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, (response) => {
+      let data = '';
+
+      response.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      response.on('end', () => {
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          resolve();
+        } else {
+          reject(new Error(`Email send failed with status ${response.statusCode}`));
+        }
+      });
+    });
+
+    request.on('error', (error) => {
+      reject(new Error(`Email send request failed: ${error.message}`));
+    });
+
+    request.setTimeout(30000, () => {
+      request.destroy();
+      reject(new Error('Email send request timed out'));
+    });
+  });
 }
 
 /**
@@ -511,4 +572,5 @@ async function replaceTokens(text, caseId, ticketNumber, transaction) {
 module.exports = {
   createTicket,
   replaceTokens,
+  sendEmailTicket,
 };
