@@ -158,6 +158,7 @@ const fetchOrderById = async (orderId) => {
         displayFinancialStatus
         email
         phone
+        note
         customer {
           id
           firstName
@@ -268,6 +269,7 @@ const fetchOrderByNumber = async (orderNumber) => {
             displayFinancialStatus
             email
             phone
+            note
             customer {
               id
               firstName

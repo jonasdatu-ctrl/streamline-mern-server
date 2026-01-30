@@ -21,7 +21,7 @@ const { generateToken } = require("../utils/authUtils");
 const {
   generateAccessCode,
   sendAccessCodeEmail,
-} = require("../utils/emailService");
+} = require("../services/emailService");
 const {
   userQueries,
   ipAccessQueries,

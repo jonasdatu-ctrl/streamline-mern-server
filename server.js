@@ -11,7 +11,7 @@ const morgan = require("morgan");
 
 // Import custom modules
 const { connectDB } = require("./config/database");
-const { initializeTransporter } = require("./utils/emailService");
+const { initializeTransporter } = require("./services/emailService");
 const routes = require("./routes");
 
 // Initialize Express app

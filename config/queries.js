@@ -95,14 +95,21 @@ const statusQueries = {
 const caseQueries = {
   /**
    * Check if a case exists and get basic information with status
+   * Includes the latest status update from CaseTransactions
    */
   getCaseWithStatus: `
     SELECT TOP 1
       c.Case_ID,
       c.Case_Patient_First_Name,
-      c.Case_Date_Received,
-      c.IsRushOrder,
-      s.Status_Streamline_Options
+      CAST(c.Case_Date_Received AS DATE) AS Case_Date_Received,
+      CASE WHEN c.IsRushOrder = 'Y' THEN 1 ELSE 0 END AS IsRushOrder,
+      s.Status_Streamline_Options,
+      (
+        SELECT TOP 1 CAST(ct.Case_Date_Record_Created AS DATE)
+        FROM dbo.CaseTransaction ct
+        WHERE ct.Case_ID = c.Case_ID
+        ORDER BY ct.Case_Date_Record_Created DESC
+      ) AS Last_Status_Update
     FROM dbo.[Case] c
     LEFT JOIN dbo.Status s ON c.Case_Status_Code = s.Status_ID
     WHERE c.Case_ID = :caseId
@@ -207,6 +214,59 @@ const caseQueries = {
       NULL,
       :carrierId
     )
+  `,
+
+  /**
+   * Insert case item (line item from Shopify)
+   */
+  insertCaseItem: `
+    INSERT INTO dbo.Case_Items (
+      Case_Id,
+      [name],
+      case_item_tooth,
+      case_item_qty,
+      case_item_shade_ging,
+      case_item_shade_body,
+      case_item_shade_incis,
+      modifier,
+      unit_price
+    ) VALUES (
+      :caseId,
+      :name,
+      :tooth,
+      :qty,
+      :shade,
+      :shade,
+      :shade,
+      :qty,
+      '0.00'
+    );
+    SELECT SCOPE_IDENTITY() AS case_item_id
+  `,
+
+  /**
+   * Insert case item tooth
+   */
+  insertCaseItemTooth: `
+    INSERT INTO dbo.case_item_tooth (
+      case_item_id,
+      item_tooth
+    ) VALUES (
+      :caseItemId,
+      :itemTooth
+    )
+  `,
+
+  /**
+   * Update case after line items are added
+   */
+  updateCaseAfterLineItems: `
+    UPDATE dbo.[Case]
+    SET RXInstructionsReviewed = 'Y',
+        ItemTeethShadeReviewed = 'Y',
+        CaseType = 1,
+        Case_Lab_ID = 52
+    WHERE Case_ID = :caseId
   `,
 };
 
@@ -431,6 +491,214 @@ const loggingQueries = {
 };
 
 // =============================================================================
+// TICKET QUERIES
+// =============================================================================
+
+const ticketQueries = {
+  /**
+   * Get email template by ID
+   */
+  getEmailTemplate: `
+    SELECT 
+      subject,
+      message,
+      Default_From_Address,
+      Default_to_Address,
+      Default_CC_Address,
+      Default_BCC_Address,
+      Default_Scheduled_Status_ID
+    FROM Email_template 
+    WHERE email_template_id = :templateId
+  `,
+
+  /**
+   * Get next ticket number for a case
+   */
+  getNextTicketNumber: `
+    SELECT COALESCE(MAX(Ticket_Number), 0) + 1 AS nextTicketNo 
+    FROM case_ticket 
+    WHERE case_id = :caseId
+  `,
+
+  /**
+   * Get user email from case
+   */
+  getUserEmailFromCase: `
+    SELECT u.EmailAddr 
+    FROM v_case c 
+    INNER JOIN v_user u ON c.userId = u.userId
+    WHERE c.case_id = :caseId
+  `,
+
+  /**
+   * Get case status code
+   */
+  getCaseStatusCode: `
+    SELECT Case_Status_Code 
+    FROM [case] 
+    WHERE case_id = :caseId
+  `,
+
+  /**
+   * Insert case ticket
+   */
+  insertCaseTicket: `
+    INSERT INTO case_ticket (
+      case_id, 
+      ticket_number, 
+      status, 
+      IsDueDateTicket, 
+      ScheduleDate, 
+      ScheduleStatusId
+    ) 
+    VALUES (
+      :caseId, 
+      :ticketNumber, 
+      :status, 
+      :isDueDateTicket, 
+      :scheduleDate, 
+      :scheduleStatusId
+    );
+    SELECT SCOPE_IDENTITY() AS newTicketId
+  `,
+
+  /**
+   * Insert case ticket detail
+   */
+  insertCaseTicketDetail: `
+    INSERT INTO case_ticket_detail (
+      Case_Ticket_Id, 
+      assignedToUserId, 
+      Detail_Number, 
+      Action, 
+      From_address, 
+      To_Address, 
+      CC_Address, 
+      BCC_Address, 
+      Email_Template_Id, 
+      Subject, 
+      Message, 
+      CreatedBy, 
+      CaseStatusCode
+    ) 
+    VALUES (
+      :ticketId, 
+      :assignedTo, 
+      1, 
+      'Email', 
+      :fromAddr, 
+      :toAddr, 
+      :ccAddr, 
+      :bccAddr, 
+      :templateId, 
+      :subject, 
+      :message, 
+      :userId, 
+      :statusCode
+    );
+    SELECT SCOPE_IDENTITY() AS newDetailId
+  `,
+
+  /**
+   * Check if ticket assignment already logged
+   */
+  checkTicketAssignmentLog: `
+    SELECT COUNT(*) AS updateFlag 
+    FROM dbo.Case_Ticket_Assignment_Log 
+    WHERE Case_Ticket_Detail_Id = :detailId
+      AND RecordTimeAndDate = (
+        SELECT MAX(RecordTimeAndDate) 
+        FROM dbo.Case_Ticket_Assignment_Log 
+        WHERE Case_Ticket_Detail_Id = :detailId
+      )
+      AND AssignedToUserId = :assignedTo
+  `,
+
+  /**
+   * Insert ticket assignment log
+   */
+  insertTicketAssignmentLog: `
+    INSERT INTO dbo.Case_Ticket_Assignment_Log (
+      Case_Ticket_Detail_Id, 
+      AssignedToUserId, 
+      UserId, 
+      RecordTimeAndDate
+    ) 
+    VALUES (
+      :detailId, 
+      :assignedTo, 
+      :userId, 
+      GETDATE()
+    )
+  `,
+
+  /**
+   * Get case data with all details for token replacement
+   * Fetches case, user, customer, shipping, status, and lab information
+   */
+  getCaseDataForTokens: `
+    SELECT 
+      c.Case_ID,
+      c.Case_Patient_First_Name,
+      c.Case_Patient_Last_Name,
+      c.Case_Patient_Num,
+      c.Case_Date_Received,
+      c.Case_Date_Required_By_DR,
+      c.Case_Date_Estimated_Return,
+      c.Case_Date_Ship_TO_Lab,
+      c.Case_Ship_TO_Lab_Track_Num,
+      c.Case_Lab_Ref_Number,
+      c.Shopify_Email,
+      s.Status_Streamline_Options,
+      s.Status_Doctor_View,
+      s.Description as Status_Description,
+      sg.Name as Status_Group_Name,
+      u.UserID,
+      u.UserName,
+      u.UserLogin,
+      u.Title,
+      u.UserFName,
+      u.UserLName,
+      u.Password,
+      u.EmailAddr,
+      u.Fax,
+      u.Case_Tracking_Email,
+      u.Date_Created,
+      cu.Customer_Display_Name,
+      cu.CustomerAccountNumber,
+      cu.PrimaryDoctorName,
+      cu.email as CustomerEmailAddress,
+      cu.tel1 as CustomerPhone,
+      shipTo.ShipToName,
+      shipTo.Address1 as ShipTo_Address1,
+      shipTo.Address2 as ShipTo_Address2,
+      shipTo.City as ShipTo_City,
+      shipTo.State as ShipTo_State,
+      shipTo.Zip as ShipTo_Zip,
+      shipTo.Phone1 as ShipToPhone1,
+      shipTo.InboundCarrierName,
+      cu.Name as Customer_Name,
+      cu.Address1 as Bill_Address1,
+      cu.Address2 as Bill_Address2,
+      cu.City as Bill_City,
+      cu.State as Bill_State,
+      cu.Zip as Bill_Zip,
+      p.Name as LabName,
+      p.ContactName1 as LabContactName1,
+      p.Email as LabEmail,
+      p.CC_Email as LabCCEmail
+    FROM dbo.[Case] c
+    LEFT JOIN dbo.Status s ON c.Case_Status_Code = s.Status_ID
+    LEFT JOIN dbo.StatusGroup sg ON s.StatusGroupId = sg.StatusGroupId
+    LEFT JOIN v_user u ON c.userId = u.userId
+    LEFT JOIN v_customer cu ON u.customerId = cu.customerId
+    LEFT JOIN V_CustomerShipTo shipTo ON c.ShipToId = shipTo.customer_shipto_id
+    LEFT JOIN dbo.Provider p ON c.Case_Lab_ID = p.ProviderID
+    WHERE c.Case_ID = :caseId
+  `,
+};
+
+// =============================================================================
 // EXPORTS
 // =============================================================================
 
@@ -442,4 +710,5 @@ module.exports = {
   ipAccessQueries,
   adminSessionQueries,
   loggingQueries,
+  ticketQueries,
 };

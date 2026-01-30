@@ -13,6 +13,7 @@ const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
 const { caseQueries } = require("../config/queries");
+const { createTicket } = require("../services/ticketService");
 
 const router = express.Router();
 
@@ -64,6 +65,178 @@ const formatErrorResponse = (
     response.details = message;
   }
   return { statusCode, data: response };
+};
+
+/**
+ * Helper: Process order line items and add to case
+ * Extracts encoded SKUs from note and line items
+ * Pattern: --A1-UL-R33330.1--
+ */
+const processOrderLineItems = async (
+  orderData,
+  caseId,
+  userId,
+  transaction,
+) => {
+  try {
+    // Extract encoded SKUs from note using regex pattern
+    const skuPattern = /(--[A-Z0-9]+\-[A-Z]+\-[A-Z0-9\.]+--)/g;
+    const noteSkus = [];
+
+    if (orderData.note) {
+      const matches = orderData.note.match(skuPattern);
+      if (matches) {
+        noteSkus.push(...matches);
+      }
+    }
+
+    // Collect line items with encoded SKUs
+    const lineItemSkus = [];
+    if (orderData.lineItems && orderData.lineItems.edges) {
+      for (const item of orderData.lineItems.edges) {
+        const sku = item.node.sku || "";
+        if (sku.startsWith("--")) {
+          lineItemSkus.push(sku);
+        }
+      }
+    }
+
+    // If no valid SKUs found, create a ticket (template 1363)
+    if (noteSkus.length === 0 && lineItemSkus.length === 0) {
+      console.log(`No valid SKUs found for case ${caseId}, creating ticket...`);
+      await createTicket({
+        caseId,
+        userId,
+        templateId: 1363,
+        ticketStatus: 'Open',
+      }, transaction);
+      
+      // Still update the case
+      await sequelize.query(caseQueries.updateCaseAfterLineItems, {
+        replacements: { caseId },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction,
+      });
+      return;
+    }
+
+    // Process SKUs from note
+    for (const sku of noteSkus) {
+      await processEncodedSku(sku, caseId, transaction);
+    }
+
+    // Process line items with encoded SKUs
+    for (const sku of lineItemSkus) {
+      await processEncodedSku(sku, caseId, transaction);
+    }
+
+    // Always update case after processing
+    await sequelize.query(caseQueries.updateCaseAfterLineItems, {
+      replacements: { caseId },
+      type: sequelize.QueryTypes.UPDATE,
+      transaction,
+    });
+  } catch (error) {
+    console.error("Error processing line items:", error);
+    // Don't throw - allow case creation to succeed even if line items fail
+  }
+};
+
+/**
+ * Helper: Parse and process encoded SKU
+ * Format: --A1-UL-R33330.1--
+ * Parts: shade-upperLower-product
+ */
+const processEncodedSku = async (sku, caseId, transaction) => {
+  try {
+    // Remove leading/trailing dashes and replace dots temporarily
+    const normalized = sku
+      .replace(/\./g, "~")
+      .replace(/--/g, "")
+      .replace(/-/g, ".");
+    const parts = normalized.split(".");
+
+    if (parts.length < 3) {
+      console.warn(`Invalid SKU format: ${sku}`);
+      return;
+    }
+
+    // Extract parts: product.upperLower.shade
+    const product = parts[0].replace(/~/g, ".");
+    const upperLower = parts[1];
+    const shade = parts[2];
+
+    // Determine upper/lower text and quantity
+    let toothLocation = "";
+    let qty = 1;
+
+    switch (upperLower.toUpperCase()) {
+      case "U":
+        toothLocation = "Upper";
+        qty = 1;
+        break;
+      case "L":
+        toothLocation = "Lower";
+        qty = 1;
+        break;
+      case "UL":
+      case "LU":
+        toothLocation = "Upper, Lower";
+        qty = 2;
+        break;
+      default:
+        toothLocation = "";
+        qty = 1;
+    }
+
+    // Insert case item
+    const result = await sequelize.query(caseQueries.insertCaseItem, {
+      replacements: {
+        caseId,
+        name: product,
+        tooth: toothLocation,
+        qty,
+        shade,
+      },
+      type: sequelize.QueryTypes.INSERT,
+      transaction,
+    });
+
+    // Get the inserted case_item_id
+    const caseItemId = result[0]?.[0]?.case_item_id;
+
+    if (caseItemId) {
+      // Insert tooth records
+      if (toothLocation.includes("Upper")) {
+        await sequelize.query(caseQueries.insertCaseItemTooth, {
+          replacements: {
+            caseItemId,
+            itemTooth: "Upper",
+          },
+          type: sequelize.QueryTypes.INSERT,
+          transaction,
+        });
+      }
+
+      if (toothLocation.includes("Lower")) {
+        await sequelize.query(caseQueries.insertCaseItemTooth, {
+          replacements: {
+            caseItemId,
+            itemTooth: "Lower",
+          },
+          type: sequelize.QueryTypes.INSERT,
+          transaction,
+        });
+      }
+    }
+
+    console.log(
+      `Processed SKU: ${sku} -> Product: ${product}, Tooth: ${toothLocation}, Shade: ${shade}`,
+    );
+  } catch (error) {
+    console.error(`Error processing SKU ${sku}:`, error);
+    // Don't throw - allow other SKUs to be processed
+  }
 };
 
 /**
@@ -381,6 +554,14 @@ router.post("/create-case", verifyToken, async (req, res) => {
       type: sequelize.QueryTypes.INSERT,
       transaction,
     });
+
+    // Process line items from order (encoded SKUs)
+    await processOrderLineItems(
+      orderData,
+      caseData.caseId,
+      authUser.UserId,
+      transaction,
+    );
 
     // Commit transaction
     await transaction.commit();
