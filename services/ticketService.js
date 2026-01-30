@@ -8,7 +8,7 @@
 const { sequelize } = require("../config/database");
 const { ticketQueries } = require("../config/queries");
 const { replaceTokens } = require("../utils/tokenReplacer");
-const { sendTicketEmail } = require("../utils/emailService");
+const { sendTicketEmail } = require("./emailService");
 
 /**
  * Create a new ticket for a case
