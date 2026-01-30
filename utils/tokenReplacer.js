@@ -8,6 +8,7 @@
  */
 
 const { sequelize } = require("../config/database");
+const { ticketQueries } = require("../config/queries");
 
 /**
  * Replace tokens in a string (e.g., @@CASE_ID, @@TICKET_NUMBER)
@@ -27,71 +28,11 @@ async function replaceTokens(text, caseId, ticketNumber, transaction) {
 
   try {
     // Fetch case data with all necessary joins
-    const caseData = await sequelize.query(
-      `SELECT 
-        c.Case_ID,
-        c.Case_Patient_First_Name,
-        c.Case_Patient_Last_Name,
-        c.Case_Patient_Num,
-        c.Case_Date_Received,
-        c.Case_Date_Required_By_DR,
-        c.Case_Date_Estimated_Return,
-        c.Case_Date_Ship_TO_Lab,
-        c.Case_Ship_TO_Lab_Track_Num,
-        c.Case_Lab_Ref_Number,
-        c.Shopify_Email,
-        s.Status_Streamline_Options,
-        s.Status_Doctor_View,
-        s.Description as Status_Description,
-        sg.Name as Status_Group_Name,
-        u.UserID,
-        u.UserName,
-        u.UserLogin,
-        u.Title,
-        u.UserFName,
-        u.UserLName,
-        u.Password,
-        u.EmailAddr,
-        u.Fax,
-        u.Case_Tracking_Email,
-        u.Date_Created,
-        cu.Customer_Display_Name,
-        cu.CustomerAccountNumber,
-        cu.PrimaryDoctorName,
-        cu.email as CustomerEmailAddress,
-        cu.tel1 as CustomerPhone,
-        shipTo.ShipToName,
-        shipTo.Address1 as ShipTo_Address1,
-        shipTo.Address2 as ShipTo_Address2,
-        shipTo.City as ShipTo_City,
-        shipTo.State as ShipTo_State,
-        shipTo.Zip as ShipTo_Zip,
-        shipTo.Phone1 as ShipToPhone1,
-        shipTo.InboundCarrierName,
-        cu.Name as Customer_Name,
-        cu.Address1 as Bill_Address1,
-        cu.Address2 as Bill_Address2,
-        cu.City as Bill_City,
-        cu.State as Bill_State,
-        cu.Zip as Bill_Zip,
-        p.Name as LabName,
-        p.ContactName1 as LabContactName1,
-        p.Email as LabEmail,
-        p.CC_Email as LabCCEmail
-      FROM dbo.[Case] c
-      LEFT JOIN dbo.Status s ON c.Case_Status_Code = s.Status_ID
-      LEFT JOIN dbo.StatusGroup sg ON s.StatusGroupId = sg.StatusGroupId
-      LEFT JOIN v_user u ON c.userId = u.userId
-      LEFT JOIN v_customer cu ON u.customerId = cu.customerId
-      LEFT JOIN V_CustomerShipTo shipTo ON c.ShipToId = shipTo.customer_shipto_id
-      LEFT JOIN dbo.Provider p ON c.Case_Lab_ID = p.ProviderID
-      WHERE c.Case_ID = :caseId`,
-      {
-        replacements: { caseId },
-        type: sequelize.QueryTypes.SELECT,
-        transaction,
-      },
-    );
+    const caseData = await sequelize.query(ticketQueries.getCaseDataForTokens, {
+      replacements: { caseId },
+      type: sequelize.QueryTypes.SELECT,
+      transaction,
+    });
 
     if (caseData.length === 0) {
       console.warn(

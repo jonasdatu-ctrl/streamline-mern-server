@@ -6,6 +6,7 @@
  */
 
 const { sequelize } = require("../config/database");
+const { ticketQueries } = require("../config/queries");
 const { replaceTokens } = require("../utils/tokenReplacer");
 const { sendTicketEmail } = require("../utils/emailService");
 
@@ -71,23 +72,11 @@ async function createTicket(options, transaction = null) {
     };
 
     if (templateId) {
-      const template = await sequelize.query(
-        `SELECT 
-          subject,
-          message,
-          Default_From_Address,
-          Default_to_Address,
-          Default_CC_Address,
-          Default_BCC_Address,
-          Default_Scheduled_Status_ID
-        FROM Email_template 
-        WHERE email_template_id = :templateId`,
-        {
-          replacements: { templateId },
-          type: sequelize.QueryTypes.SELECT,
-          transaction: txn,
-        },
-      );
+      const template = await sequelize.query(ticketQueries.getEmailTemplate, {
+        replacements: { templateId },
+        type: sequelize.QueryTypes.SELECT,
+        transaction: txn,
+      });
 
       if (template.length > 0) {
         const t = template[0];
@@ -113,9 +102,7 @@ async function createTicket(options, transaction = null) {
 
     // Step 2: Get next ticket number
     const ticketNumberResult = await sequelize.query(
-      `SELECT COALESCE(MAX(Ticket_Number), 0) + 1 AS nextTicketNo 
-       FROM case_ticket 
-       WHERE case_id = :caseId`,
+      ticketQueries.getNextTicketNumber,
       {
         replacements: { caseId },
         type: sequelize.QueryTypes.SELECT,
@@ -159,10 +146,7 @@ async function createTicket(options, transaction = null) {
     if (!templateData.toAddress) {
       // Try to get user email from case
       const userEmail = await sequelize.query(
-        `SELECT u.EmailAddr 
-         FROM v_case c 
-         INNER JOIN v_user u ON c.userId = u.userId
-         WHERE c.case_id = :caseId`,
+        ticketQueries.getUserEmailFromCase,
         {
           replacements: { caseId },
           type: sequelize.QueryTypes.SELECT,
@@ -178,7 +162,7 @@ async function createTicket(options, transaction = null) {
 
     // Step 5: Get current case status
     const caseStatusResult = await sequelize.query(
-      `SELECT Case_Status_Code FROM [case] WHERE case_id = :caseId`,
+      ticketQueries.getCaseStatusCode,
       {
         replacements: { caseId },
         type: sequelize.QueryTypes.SELECT,
@@ -197,9 +181,7 @@ async function createTicket(options, transaction = null) {
     const assignedTo = assignedToUserId || userId;
 
     const ticketInsertResult = await sequelize.query(
-      `INSERT INTO case_ticket (case_id, ticket_number, status, IsDueDateTicket, ScheduleDate, ScheduleStatusId) 
-       VALUES (:caseId, :ticketNumber, :status, :isDueDateTicket, :scheduleDate, :scheduleStatusId);
-       SELECT SCOPE_IDENTITY() AS newTicketId`,
+      ticketQueries.insertCaseTicket,
       {
         replacements: {
           caseId,
@@ -217,13 +199,7 @@ async function createTicket(options, transaction = null) {
 
     // Step 7: Insert case_ticket_detail
     const ticketDetailResult = await sequelize.query(
-      `INSERT INTO case_ticket_detail 
-       (Case_Ticket_Id, assignedToUserId, Detail_Number, Action, From_address, To_Address, 
-        CC_Address, BCC_Address, Email_Template_Id, Subject, Message, CreatedBy, CaseStatusCode) 
-       VALUES 
-       (:ticketId, :assignedTo, 1, 'Email', :fromAddr, :toAddr, :ccAddr, :bccAddr, 
-        :templateId, :subject, :message, :userId, :statusCode);
-       SELECT SCOPE_IDENTITY() AS newDetailId`,
+      ticketQueries.insertCaseTicketDetail,
       {
         replacements: {
           ticketId: newTicketId,
@@ -247,15 +223,7 @@ async function createTicket(options, transaction = null) {
     // Step 8: Append ticket assignment log
     // Only log if the most recent assignment is not already to this user
     const updateFlagResult = await sequelize.query(
-      `SELECT COUNT(*) AS updateFlag 
-       FROM dbo.Case_Ticket_Assignment_Log 
-       WHERE Case_Ticket_Detail_Id = :detailId
-         AND RecordTimeAndDate = (
-           SELECT MAX(RecordTimeAndDate) 
-           FROM dbo.Case_Ticket_Assignment_Log 
-           WHERE Case_Ticket_Detail_Id = :detailId
-         )
-         AND AssignedToUserId = :assignedTo`,
+      ticketQueries.checkTicketAssignmentLog,
       {
         replacements: { detailId: newDetailId, assignedTo },
         type: sequelize.QueryTypes.SELECT,
@@ -264,22 +232,17 @@ async function createTicket(options, transaction = null) {
     );
 
     const updateFlag = updateFlagResult[0].updateFlag;
-    
+
     if (updateFlag === 0) {
-      await sequelize.query(
-        `INSERT INTO dbo.Case_Ticket_Assignment_Log 
-         (Case_Ticket_Detail_Id, AssignedToUserId, UserId, RecordTimeAndDate) 
-         VALUES (:detailId, :assignedTo, :userId, GETDATE())`,
-        {
-          replacements: {
-            detailId: newDetailId,
-            assignedTo,
-            userId,
-          },
-          type: sequelize.QueryTypes.INSERT,
-          transaction: txn,
+      await sequelize.query(ticketQueries.insertTicketAssignmentLog, {
+        replacements: {
+          detailId: newDetailId,
+          assignedTo,
+          userId,
         },
-      );
+        type: sequelize.QueryTypes.INSERT,
+        transaction: txn,
+      });
     }
 
     // Commit transaction if we created it
@@ -297,7 +260,10 @@ async function createTicket(options, transaction = null) {
     //     await sendTicketEmail(newDetailId);
     //     console.log(`✓ Email sent for ticket detail ${newDetailId}`);
     //   } catch (emailError) {
-    //     console.error(`Warning: Failed to send email for ticket ${newDetailId}:`, emailError.message);
+    //     console.error(
+    //       `Warning: Failed to send email for ticket ${newDetailId}:`,
+    //       emailError.message,
+    //     );
     //     // Don't throw - ticket was created successfully
     //   }
     // }
