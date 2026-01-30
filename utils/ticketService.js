@@ -267,7 +267,7 @@ async function createTicket(options, transaction = null) {
           bccAddr: templateData.bccAddress || "",
           templateId,
           subject: templateData.subject,
-          message: templateData.message
+          message: templateData.message,
           userId,
           statusCode: caseStatusCode,
         },
