@@ -13,6 +13,7 @@ const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
 const { caseQueries } = require("../config/queries");
+const { createTicket } = require("../utils/ticketService");
 
 const router = express.Router();
 
@@ -89,22 +90,47 @@ const processOrderLineItems = async (
       }
     }
 
+    // Collect line items with encoded SKUs
+    const lineItemSkus = [];
+    if (orderData.lineItems && orderData.lineItems.edges) {
+      for (const item of orderData.lineItems.edges) {
+        const sku = item.node.sku || "";
+        if (sku.startsWith("--")) {
+          lineItemSkus.push(sku);
+        }
+      }
+    }
+
+    // If no valid SKUs found, create a ticket (template 1363)
+    if (noteSkus.length === 0 && lineItemSkus.length === 0) {
+      console.log(`No valid SKUs found for case ${caseId}, creating ticket...`);
+      await createTicket({
+        caseId,
+        userId,
+        templateId: 1363,
+        ticketStatus: 'Open',
+      }, transaction);
+      
+      // Still update the case
+      await sequelize.query(caseQueries.updateCaseAfterLineItems, {
+        replacements: { caseId },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction,
+      });
+      return;
+    }
+
     // Process SKUs from note
     for (const sku of noteSkus) {
       await processEncodedSku(sku, caseId, transaction);
     }
 
     // Process line items with encoded SKUs
-    if (orderData.lineItems && orderData.lineItems.edges) {
-      for (const item of orderData.lineItems.edges) {
-        const sku = item.node.sku || "";
-        if (sku.startsWith("--")) {
-          await processEncodedSku(sku, caseId, transaction);
-        }
-      }
+    for (const sku of lineItemSkus) {
+      await processEncodedSku(sku, caseId, transaction);
     }
 
-    // Always update case after processing (even if no line items found)
+    // Always update case after processing
     await sequelize.query(caseQueries.updateCaseAfterLineItems, {
       replacements: { caseId },
       type: sequelize.QueryTypes.UPDATE,
