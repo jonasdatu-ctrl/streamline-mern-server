@@ -108,7 +108,9 @@ async function sendAccessCodeEmail(email, accessCode) {
     }
 
     if (!transporter) {
-      console.error("❌ Email service not configured - access code email not sent");
+      console.error(
+        "❌ Email service not configured - access code email not sent",
+      );
       return false;
     }
 
@@ -284,6 +286,62 @@ async function testSmtpConnection() {
   }
 }
 
+/**
+ * Send email for a ticket via Streamline ASP endpoint
+ * Makes HTTP request to legacy email sending system
+ *
+ * @param {number} ticketDetailId - Case ticket detail ID
+ * @param {string} [attachmentPath] - Optional file path for attachment (e.g., "C:\path\to\file.pdf")
+ * @returns {Promise<void>}
+ */
+async function sendTicketEmail(ticketDetailId, attachmentPath = null) {
+  const https = require("https");
+
+  if (!ticketDetailId || ticketDetailId < 1) {
+    throw new Error("ticketDetailId must be greater than zero");
+  }
+
+  const wwwroot =
+    process.env.STREAMLINE_WEB_ROOT || "https://www.streamlinedental.com";
+  let url = `${wwwroot}/Secure/Tickets/SendTicketEmail.asp?TicketDetailId=${ticketDetailId}`;
+
+  // Add attachment parameter if provided
+  if (attachmentPath) {
+    // URL encode the attachment path
+    const encodedPath = encodeURIComponent(attachmentPath);
+    url += `&attach=${encodedPath}`;
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, (response) => {
+      let data = "";
+
+      response.on("data", (chunk) => {
+        data += chunk;
+      });
+
+      response.on("end", () => {
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          resolve();
+        } else {
+          reject(
+            new Error(`Email send failed with status ${response.statusCode}`),
+          );
+        }
+      });
+    });
+
+    request.on("error", (error) => {
+      reject(new Error(`Email send request failed: ${error.message}`));
+    });
+
+    request.setTimeout(30000, () => {
+      request.destroy();
+      reject(new Error("Email send request timed out"));
+    });
+  });
+}
+
 module.exports = {
   initializeTransporter,
   generateAccessCode,
@@ -293,4 +351,5 @@ module.exports = {
   sendCaseStatusUpdate,
   sendFailedLoginAlert,
   testSmtpConnection,
+  sendTicketEmail,
 };

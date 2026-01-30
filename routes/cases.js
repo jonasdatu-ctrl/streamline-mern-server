@@ -13,7 +13,7 @@ const express = require("express");
 const { sequelize } = require("../config/database");
 const { verifyToken } = require("../middleware/auth");
 const { caseQueries } = require("../config/queries");
-const { createTicket } = require("../utils/ticketService");
+const { createTicket } = require("../services/ticketService");
 
 const router = express.Router();
 
